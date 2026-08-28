@@ -23,16 +23,39 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load environment variables if .env file exists in Server/ or root directory
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
+const TWITCH_EXTENSION_CLIENT_ID = process.env.TWITCH_EXTENSION_CLIENT_ID || process.env.TWITCH_CLIENT_ID || '';
+const TWITCH_EXTENSION_SECRET = process.env.TWITCH_EXTENSION_SECRET || '';
+const TWITCH_OWNER_ID = process.env.TWITCH_OWNER_ID || '12345678';
 
-// Enable CORS for Twitch extension origins & local test rig
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Client-Id', 'X-Extension-Jwt'],
-}));
+// Enable CORS for Twitch extension origins & local test rig + Chrome Private Network Access (PNA)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Client-Id, X-Extension-Jwt, X-Requested-With, Accept, Access-Control-Request-Private-Network');
+  
+  // CRITICAL for Chrome PNA (Private Network Access) when public sites (twitch.tv) call local servers (localhost)
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  
+  // Allow framing by Twitch extensions and local iframe rig
+  res.removeHeader('X-Frame-Options');
+  res.setHeader(
+    'Content-Security-Policy',
+    "frame-ancestors 'self' https://*.twitch.tv https://*.ext-twitch.tv http://localhost:* https://localhost:*;"
+  );
+
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 app.use(express.json());
 
@@ -40,12 +63,13 @@ app.use(express.json());
 // SSL Key & Certificate Management with node-forge
 // -------------------------------------------------------------
 const SSL_DIR = path.join(__dirname, 'ssl');
-const KEY_PATH = path.join(SSL_DIR, 'server.key');
-const CERT_PATH = path.join(SSL_DIR, 'server.cert');
+const KEY_PATH = process.env.SSL_KEY_PATH ? path.resolve(process.env.SSL_KEY_PATH) : path.join(SSL_DIR, 'server.key');
+const CERT_PATH = process.env.SSL_CERT_PATH ? path.resolve(process.env.SSL_CERT_PATH) : path.join(SSL_DIR, 'server.cert');
 
 function ensureSslCertificates() {
-  if (!fs.existsSync(SSL_DIR)) {
-    fs.mkdirSync(SSL_DIR, { recursive: true });
+  const targetDir = path.dirname(KEY_PATH);
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
   }
 
   const keyExists = fs.existsSync(KEY_PATH);
@@ -199,7 +223,8 @@ app.get('/api/ebs/config', (req, res) => {
   res.json({
     status: 'ok',
     config: ebsState.config,
-    channelId: req.headers['client-id'] || '12345678',
+    clientId: TWITCH_EXTENSION_CLIENT_ID || undefined,
+    channelId: TWITCH_OWNER_ID || req.headers['client-id'] || '12345678',
   });
 });
 

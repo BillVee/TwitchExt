@@ -300,9 +300,12 @@
     }
   });
 
-  // Expose to window
+  // Expose to window only if not already provided by official Twitch helper
   window.Twitch = window.Twitch || {};
-  window.Twitch.ext = TwitchExt;
-
-  console.log('[TwitchExt Mock] Loaded Twitch Extension Helper Bridge.');
+  if (!window.Twitch.ext) {
+    window.Twitch.ext = TwitchExt;
+    console.log('[TwitchExt Mock] Loaded Twitch Extension Helper Bridge.');
+  } else {
+    console.log('[TwitchExt] Official Twitch Extension Helper detected.');
+  }
 })();

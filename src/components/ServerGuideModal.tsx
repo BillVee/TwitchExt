@@ -35,12 +35,19 @@ export const ServerGuideModal: React.FC<ServerGuideModalProps> = ({ isOpen, onCl
     }
   };
 
-  const envContent = `# Twitch Extension Configuration & EBS Settings
-TWITCH_EXTENSION_CLIENT_ID="your-extension-client-id-here"
-TWITCH_EXTENSION_SECRET="your-base64-extension-secret-here"
-APP_URL="https://localhost:3000"
+  const envContent = `# Server Network Configuration
 PORT=3000
-HOST="localhost"`;
+HOST=0.0.0.0
+NODE_ENV=development
+
+# Twitch Extension Credentials (dev.twitch.tv/console/extensions)
+TWITCH_EXTENSION_CLIENT_ID=your_twitch_extension_client_id_here
+TWITCH_EXTENSION_SECRET=your_base64_extension_secret_here
+TWITCH_OWNER_ID=your_twitch_broadcaster_user_id_here
+
+# Optional Custom SSL paths (If omitted, node-forge generates them automatically)
+# SSL_KEY_PATH=./ssl/server.key
+# SSL_CERT_PATH=./ssl/server.cert`;
 
   const nodeForgeSnippet = `// Server/server.js - SSL Generation with node-forge
 const keys = forge.pki.rsa.generateKeyPair(2048);
