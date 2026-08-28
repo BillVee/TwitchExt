@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  --bg-twitch-dark: #0E0E10;
+  --bg-twitch-surface: #18181B;
+  --bg-twitch-secondary: #1F1F23;
+  --border-twitch: #2D2D30;
+  --text-twitch-primary: #EFEFF1;
+  --text-twitch-muted: #ADADB8;
+  --twitch-purple: #9146FF;
+}
+
+body {
+  background-color: #0E0E10;
+  color: #EFEFF1;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbars with Twitch theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0E0E10;
+}
+::-webkit-scrollbar-thumb {
+  background: #2D2D30;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9146FF;
+}
+

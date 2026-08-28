@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitch Extension Configuration</title>
+  <script src="/twitch-ext.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#0E0E10] text-[#EFEFF1] font-sans p-4 min-h-screen text-xs select-none">
+  
+  <div class="max-w-6xl mx-auto space-y-4">
+    
+    <!-- Top Header Bar -->
+    <div class="flex flex-wrap items-center justify-between gap-3 bg-[#18181B] border border-[#2D2D30] p-3.5 rounded-lg shadow-lg">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded bg-[#9146FF] flex items-center justify-center font-bold text-white text-sm shadow">
+          ⚙️
+        </div>
+        <div>
+          <h1 class="font-semibold text-[#EFEFF1] text-sm md:text-base flex items-center gap-2">
+            Broadcaster Extension Settings
+            <span class="text-[10px] font-mono font-bold uppercase bg-black/60 text-[#ADADB8] px-2 py-0.5 rounded border border-white/10">
+              config.html
+            </span>
+          </h1>
+          <p class="text-[11px] text-[#ADADB8]">Manage extension configuration, live poll, overlay alerts, and EBS synchronization</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 bg-[#0E0E10] px-3 py-1.5 rounded border border-[#2D2D30]">
+          <span id="ebs-indicator" class="w-2 h-2 rounded-full bg-green-500"></span>
+          <span class="text-[#ADADB8] text-xs">EBS Server:</span>
+          <span id="ebs-latency-badge" class="font-mono text-[#9146FF] text-xs font-semibold">Testing...</span>
+        </div>
+        <button id="btn-save-all" class="bg-[#9146FF] hover:bg-[#772ce8] text-white font-semibold px-4 py-1.5 rounded transition text-xs shadow flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+          Save & Sync All Views
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Grid: Settings & Poll Config -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      
+      <!-- Column 1: General & Appearance -->
+      <div class="bg-[#18181B] border border-[#2D2D30] rounded-lg p-3.5 space-y-3">
+        <h2 class="font-semibold text-[#EFEFF1] text-xs flex items-center gap-2 border-b border-[#2D2D30] pb-2">
+          <span>🎨</span> General & Branding
+        </h2>
+
+        <div class="space-y-1">
+          <label class="text-[11px] font-medium text-[#ADADB8]">Extension Display Title</label>
+          <input id="input-title" type="text" class="w-full bg-[#0E0E10] border border-[#2D2D30] rounded px-2.5 py-1.5 text-[#EFEFF1] focus:outline-none focus:border-[#9146FF] text-xs" value="Community Interactive Hub">
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-[11px] font-medium text-[#ADADB8]">Overlay Welcome Message</label>
+          <textarea id="input-welcome" rows="2" class="w-full bg-[#0E0E10] border border-[#2D2D30] rounded px-2.5 py-1.5 text-[#EFEFF1] focus:outline-none focus:border-[#9146FF] text-xs">Welcome to the stream! Click around to interact.</textarea>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <label class="text-[11px] font-medium text-[#ADADB8]">Brand Accent Color</label>
+          <div class="flex items-center gap-2">
+            <input id="input-color" type="color" value="#9146FF" class="w-7 h-7 bg-transparent border-0 cursor-pointer rounded overflow-hidden">
+            <span id="color-hex" class="font-mono text-[11px] text-[#ADADB8]">#9146FF</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 2: Live Community Poll Setup -->
+      <div class="bg-[#18181B] border border-[#2D2D30] rounded-lg p-3.5 space-y-3">
+        <div class="flex items-center justify-between border-b border-[#2D2D30] pb-2">
+          <h2 class="font-semibold text-[#EFEFF1] text-xs flex items-center gap-2">
+            <span>📊</span> Live Poll Configuration
+          </h2>
+          <button id="btn-reset-votes" class="text-[10px] text-red-400 hover:text-red-300 font-mono">Reset Votes</button>
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-[11px] font-medium text-[#ADADB8]">Active Question</label>
+          <input id="input-poll-question" type="text" class="w-full bg-[#0E0E10] border border-[#2D2D30] rounded px-2.5 py-1.5 text-[#EFEFF1] focus:outline-none focus:border-[#9146FF] text-xs" value="Which game should we play next?">
+        </div>
+
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between text-[11px] font-medium text-[#ADADB8]">
+            <span>Poll Options</span>
+            <button id="btn-add-opt" class="text-[#9146FF] hover:text-[#9146FF]/80 text-[10px]">+ Add Option</button>
+          </div>
+          <div id="options-inputs" class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 3: Live Broadcast Testing & EBS Diagnostics -->
+      <div class="bg-[#18181B] border border-[#2D2D30] rounded-lg p-3.5 space-y-3 flex flex-col justify-between">
+        <div class="space-y-3">
+          <h2 class="font-semibold text-[#EFEFF1] text-xs flex items-center gap-2 border-b border-[#2D2D30] pb-2">
+            <span>⚡</span> Broadcast & Live Triggers
+          </h2>
+
+          <div class="space-y-1.5">
+            <label class="text-[11px] font-medium text-[#ADADB8]">Custom Alert Message</label>
+            <div class="flex gap-2">
+              <input id="input-alert-msg" type="text" placeholder="e.g. Boss Fight in 5 Minutes!" class="w-full bg-[#0E0E10] border border-[#2D2D30] rounded px-2.5 py-1.5 text-[#EFEFF1] focus:outline-none focus:border-[#9146FF] text-xs" value="Streamer started a bonus giveaway!">
+              <button id="btn-broadcast-alert" class="bg-[#9146FF] hover:bg-[#772ce8] text-white font-semibold px-3 py-1.5 rounded whitespace-nowrap transition text-xs flex items-center gap-1">
+                <span>📡</span> Send
+              </button>
+            </div>
+          </div>
+
+          <div class="pt-1">
+            <button id="btn-test-ebs-ping" class="w-full bg-[#1F1F23] hover:bg-[#2D2D30] text-[#EFEFF1] font-medium py-1.5 px-2 rounded transition text-xs flex items-center justify-center gap-1.5 border border-[#2D2D30]">
+              <svg class="w-3.5 h-3.5 text-[#9146FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Ping EBS Endpoint (/api/ebs/ping)
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-[#0E0E10] p-2 rounded border border-[#2D2D30] font-mono text-[10px] space-y-1 text-[#ADADB8]">
+          <div class="flex justify-between"><span>Twitch JWT Auth:</span> <span class="text-green-500 font-semibold">Valid (Mock)</span></div>
+          <div class="flex justify-between"><span>EBS Channel ID:</span> <span class="text-[#EFEFF1]">12345678</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Communication & Event Log Bar -->
+    <div class="bg-[#18181B] border border-[#2D2D30] rounded-lg p-3">
+      <div class="flex items-center justify-between text-[11px] text-[#ADADB8] mb-1 border-b border-[#2D2D30] pb-1">
+        <span class="font-mono font-semibold text-[#EFEFF1] flex items-center gap-2">
+          <span>📜</span> Broadcaster Config EBS Communication Log
+        </span>
+        <button id="btn-clear-config-log" class="text-[#ADADB8] hover:text-[#EFEFF1] text-[10px]">Clear Log</button>
+      </div>
+      <div id="config-log" class="h-20 overflow-y-auto font-mono text-[10px] space-y-1 text-[#ADADB8]">
+        <div class="text-[#ADADB8]">[init] Broadcaster configuration view ready</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const configLog = document.getElementById('config-log');
+    const ebsIndicator = document.getElementById('ebs-indicator');
+    const ebsLatencyBadge = document.getElementById('ebs-latency-badge');
+    const inputTitle = document.getElementById('input-title');
+    const inputWelcome = document.getElementById('input-welcome');
+    const inputColor = document.getElementById('input-color');
+    const colorHex = document.getElementById('color-hex');
+    const inputPollQuestion = document.getElementById('input-poll-question');
+    const optionsInputs = document.getElementById('options-inputs');
+    const inputAlertMsg = document.getElementById('input-alert-msg');
+
+    let currentOptions = ['Cyberpunk 2077', 'Valorant', 'Minecraft', 'Elden Ring'];
+
+    function log(msg, type = 'info') {
+      const el = document.createElement('div');
+      const time = new Date().toLocaleTimeString().split(' ')[0];
+      el.className = type === 'error' ? 'text-rose-400' : type === 'success' ? 'text-emerald-400' : type === 'event' ? 'text-purple-300' : 'text-neutral-300';
+      el.textContent = `[${time}] ${msg}`;
+      configLog.appendChild(el);
+      configLog.scrollTop = configLog.scrollHeight;
+    }
+
+    document.getElementById('btn-clear-config-log').addEventListener('click', () => {
+      configLog.innerHTML = '<div class="text-neutral-500">[init] Log cleared</div>';
+    });
+
+    inputColor.addEventListener('input', (e) => {
+      colorHex.textContent = e.target.value.toUpperCase();
+    });
+
+    function renderOptionsInputs() {
+      optionsInputs.innerHTML = currentOptions.map((opt, idx) => `
+        <div class="flex items-center gap-1.5">
+          <span class="text-neutral-500 font-mono text-[10px] w-4">${idx + 1}.</span>
+          <input type="text" value="${opt}" onchange="updateOption(${idx}, this.value)" class="flex-1 bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-purple-500">
+          ${currentOptions.length > 2 ? `<button onclick="removeOption(${idx})" class="text-rose-400 hover:text-rose-300 px-1 text-xs">✕</button>` : ''}
+        </div>
+      `).join('');
+    }
+
+    window.updateOption = function(idx, val) {
+      currentOptions[idx] = val;
+    };
+
+    window.removeOption = function(idx) {
+      if (currentOptions.length > 2) {
+        currentOptions.splice(idx, 1);
+        renderOptionsInputs();
+      }
+    };
+
+    document.getElementById('btn-add-opt').addEventListener('click', () => {
+      if (currentOptions.length < 6) {
+        currentOptions.push(`Option ${currentOptions.length + 1}`);
+        renderOptionsInputs();
+      }
+    });
+
+    // Test EBS Connectivity
+    async function testEbsPing() {
+      try {
+        ebsIndicator.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+        const res = await window.Twitch.ext.ebs.ping();
+        ebsIndicator.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+        ebsLatencyBadge.textContent = `${res.latencyMs}ms (Online)`;
+        log(`EBS Health Check passed (${res.latencyMs}ms)`, 'success');
+      } catch (e) {
+        ebsIndicator.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+        ebsLatencyBadge.textContent = 'Offline';
+        log(`EBS Ping failed: ${e.message}`, 'error');
+      }
+    }
+
+    document.getElementById('btn-test-ebs-ping').addEventListener('click', testEbsPing);
+
+    // Save All and Sync
+    document.getElementById('btn-save-all').addEventListener('click', async () => {
+      const configData = {
+        title: inputTitle.value,
+        welcomeMessage: inputWelcome.value,
+        accentColor: inputColor.value,
+        pollQuestion: inputPollQuestion.value,
+        pollOptions: currentOptions,
+      };
+
+      log('Saving configuration to EBS & Twitch Extension service...', 'info');
+
+      try {
+        // 1. Save to EBS
+        const res = await window.Twitch.ext.ebs.saveConfig(configData);
+        log('Saved to EBS backend successfully!', 'success');
+
+        // 2. Set on Twitch Extension Configuration Service
+        window.Twitch.ext.configuration.set('broadcaster', '1.0.0', JSON.stringify(configData));
+        log('Updated Twitch Configuration Service (broadcaster segment)', 'success');
+
+        // 3. Broadcast to all open views via PubSub
+        window.Twitch.ext.send('broadcast', 'application/json', {
+          type: 'CONFIG_UPDATE',
+          config: configData,
+        });
+        log('Broadcasted CONFIG_UPDATE to Overlay and Panels', 'event');
+      } catch (err) {
+        log(`Save failed: ${err.message}`, 'error');
+      }
+    });
+
+    // Broadcast live alert button
+    document.getElementById('btn-broadcast-alert').addEventListener('click', async () => {
+      const msg = inputAlertMsg.value.trim() || 'Stream alert broadcast!';
+      log(`Broadcasting alert message to all extension views...`, 'event');
+      try {
+        await window.Twitch.ext.ebs.sendAction('BROADCASTER_ALERT', {
+          title: '📢 Broadcaster Announcement',
+          message: msg,
+        });
+        log(`Alert broadcast sent successfully!`, 'success');
+      } catch (e) {
+        log(`Broadcast error: ${e.message}`, 'error');
+      }
+    });
+
+    // Reset votes
+    document.getElementById('btn-reset-votes').addEventListener('click', async () => {
+      log('Resetting poll votes in EBS...', 'info');
+      try {
+        await window.Twitch.ext.ebs.sendAction('RESET_POLL_VOTES', {
+          question: inputPollQuestion.value,
+          options: currentOptions,
+        });
+        log('Poll votes reset to 0 in EBS and broadcasted', 'success');
+      } catch (e) {
+        log(`Reset votes failed: ${e.message}`, 'error');
+      }
+    });
+
+    async function loadInitialData() {
+      try {
+        const state = await window.Twitch.ext.ebs.getState();
+        if (state && state.config) {
+          inputTitle.value = state.config.title || 'Community Interactive Hub';
+          inputWelcome.value = state.config.welcomeMessage || '';
+          if (state.config.accentColor) {
+            inputColor.value = state.config.accentColor;
+            colorHex.textContent = state.config.accentColor.toUpperCase();
+          }
+          if (state.config.pollQuestion) inputPollQuestion.value = state.config.pollQuestion;
+          if (state.config.pollOptions && Array.isArray(state.config.pollOptions)) {
+            currentOptions = state.config.pollOptions;
+          }
+        }
+        renderOptionsInputs();
+      } catch (e) {
+        renderOptionsInputs();
+      }
+    }
+
+    if (window.Twitch && window.Twitch.ext) {
+      window.Twitch.ext.onAuthorized(() => {
+        testEbsPing();
+        loadInitialData();
+      });
+    } else {
+      renderOptionsInputs();
+    }
+  </script>
+</body>
+</html>

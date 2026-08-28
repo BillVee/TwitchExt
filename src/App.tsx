@@ -1,0 +1,235 @@
+/**
+ * Twitch Extension Developer Rig & EBS Test Harness
+ * 
+ * Layout Structure:
+ * - 1st iframe: overlay.html (Top of page, responsive aspect ratio video overlay)
+ * - 2nd iframe: panel.html (Left side under the overlay)
+ * - 3rd iframe: panel2.html (Right side of the 2nd iframe)
+ * - 4th iframe: config.html (Bottom of the other 3, taking full width of page)
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Header } from './components/Header';
+import { OverlayFrame } from './components/OverlayFrame';
+import { PanelFrames } from './components/PanelFrames';
+import { ConfigFrame } from './components/ConfigFrame';
+import { ServerGuideModal } from './components/ServerGuideModal';
+import { AspectRatioPreset, RigAuth, RigContext } from './types';
+import { Radio, Activity, CheckCircle2, Shield, Sparkles } from 'lucide-react';
+
+export default function App() {
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioPreset>('16:9 (1080p)');
+  const [streamBg, setStreamBg] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(Date.now());
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+
+  // EBS Server Communication Status
+  const [ebsOnline, setEbsOnline] = useState<boolean | null>(null);
+  const [ebsLatency, setEbsLatency] = useState<number | null>(null);
+
+  // Twitch Mock Context & Auth State
+  const [auth, setAuth] = useState<RigAuth>({
+    channelId: '12345678',
+    clientId: 'mock-twitch-client-id-xyz',
+    token: 'mock.jwt.token.twitch_extension_payload',
+    userId: '98765432',
+    role: 'broadcaster',
+    helixToken: 'mock_helix_token',
+  });
+
+  const [context, setContext] = useState<RigContext>({
+    theme: 'dark',
+    mode: 'viewer',
+    isFullScreen: false,
+    arePlayerControlsVisible: true,
+    displayResolution: '1920x1080',
+    game: 'Just Chatting',
+    language: 'en',
+    bitrate: 6000,
+    hlsLatencyBroadcaster: 1.8,
+  });
+
+  // Check EBS server connectivity
+  const checkEbsHealth = useCallback(async () => {
+    try {
+      const start = performance.now();
+      const res = await fetch('/api/ebs/ping');
+      const latency = Math.round(performance.now() - start);
+      if (res.ok) {
+        setEbsOnline(true);
+        setEbsLatency(latency);
+      } else {
+        setEbsOnline(false);
+      }
+    } catch {
+      setEbsOnline(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkEbsHealth();
+    const interval = setInterval(checkEbsHealth, 8000);
+    return () => clearInterval(interval);
+  }, [checkEbsHealth]);
+
+  // Handle postMessage communication bridge between all 4 iframes
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.data || typeof event.data !== 'object') return;
+      const { type } = event.data;
+
+      // Broadcast PubSub message from one iframe to all other peer iframes
+      if (type === 'TWITCH_PUBSUB_SEND') {
+        const { target, contentType, message } = event.data;
+        const frames = document.querySelectorAll('iframe');
+        frames.forEach((frame) => {
+          if (frame.contentWindow && frame.contentWindow !== event.source) {
+            frame.contentWindow.postMessage(
+              {
+                type: 'RIG_PUBSUB_RECEIVE',
+                data: { target, contentType, message },
+              },
+              '*'
+            );
+          }
+        });
+      } else if (type === 'TWITCH_CONFIG_SET') {
+        const { segment, version, content } = event.data;
+        const frames = document.querySelectorAll('iframe');
+        frames.forEach((frame) => {
+          if (frame.contentWindow && frame.contentWindow !== event.source) {
+            frame.contentWindow.postMessage(
+              {
+                type: 'RIG_UPDATE_CONFIG',
+                data: { segment, version, content },
+              },
+              '*'
+            );
+          }
+        });
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Broadcast Auth & Context changes to all 4 iframes
+  useEffect(() => {
+    const frames = document.querySelectorAll('iframe');
+    frames.forEach((frame) => {
+      if (frame.contentWindow) {
+        frame.contentWindow.postMessage({ type: 'RIG_UPDATE_AUTH', data: auth }, '*');
+      }
+    });
+  }, [auth]);
+
+  useEffect(() => {
+    const frames = document.querySelectorAll('iframe');
+    frames.forEach((frame) => {
+      if (frame.contentWindow) {
+        frame.contentWindow.postMessage({ type: 'RIG_UPDATE_CONTEXT', data: context }, '*');
+      }
+    });
+  }, [context]);
+
+  const handleRefreshAll = () => {
+    setRefreshKey(Date.now());
+    checkEbsHealth();
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0E0E10] text-[#EFEFF1] flex flex-col font-sans selection:bg-[#9146FF] selection:text-white">
+      
+      {/* Top Header & Developer Rig Controls */}
+      <Header
+        auth={auth}
+        setAuth={setAuth}
+        context={context}
+        setContext={setContext}
+        aspectRatio={aspectRatio}
+        setAspectRatio={setAspectRatio}
+        streamBg={streamBg}
+        setStreamBg={setStreamBg}
+        ebsOnline={ebsOnline}
+        ebsLatency={ebsLatency}
+        onRefreshAll={handleRefreshAll}
+        onOpenServerModal={() => setIsServerModalOpen(true)}
+      />
+
+      {/* Main Responsive Workspace */}
+      <main id="rig-main-workspace" className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 space-y-4">
+        
+        {/* Quick Info & Rig Status Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-[#18181B] border border-[#2D2D30] rounded-lg px-4 py-2.5 text-xs">
+          <div className="flex items-center gap-2 text-[#ADADB8]">
+            <Radio className="w-4 h-4 text-[#9146FF] animate-pulse" />
+            <span>
+              Twitch Rig Active for Channel <strong className="text-[#EFEFF1] font-mono">12345678</strong>
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#ADADB8]">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              <span>Overlay (Top)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#9146FF]" />
+              <span>Panel 1 (Left)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-indigo-400" />
+              <span>Panel 2 (Right)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span>Config (Bottom Full Width)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 1st Iframe: Overlay.html (Top of page, responsive aspect ratio) */}
+        <OverlayFrame
+          aspectRatio={aspectRatio}
+          streamBg={streamBg}
+          refreshKey={refreshKey}
+        />
+
+        {/* 2nd & 3rd Iframes: Panel.html (Left) and Panel2.html (Right) */}
+        <PanelFrames
+          refreshKey={refreshKey}
+        />
+
+        {/* 4th Iframe: Config.html (Bottom of other 3, Full Width) */}
+        <ConfigFrame
+          refreshKey={refreshKey}
+        />
+
+      </main>
+
+      {/* Footer matching Design */}
+      <footer className="h-8 bg-[#18181B] border-t border-[#2D2D30] flex items-center px-4 sm:px-6 justify-between shrink-0 text-[10px] text-[#ADADB8] font-mono">
+        <div className="flex gap-4 items-center">
+          <span>Root: <strong className="text-[#EFEFF1]">/TwitchProject</strong></span>
+          <span className="hidden sm:inline">Server: <strong className="text-[#EFEFF1]">./Server/server.js</strong></span>
+        </div>
+        <div className="flex gap-3 items-center">
+          <span className="text-green-500 font-bold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse"></span>
+            SSL READY
+          </span>
+          <div className="h-3 w-px bg-[#2D2D30]"></div>
+          <span className="hidden sm:inline">Responsive Engine: Active</span>
+        </div>
+      </footer>
+
+      {/* Documentation & Local HTTPS Setup Modal */}
+      <ServerGuideModal
+        isOpen={isServerModalOpen}
+        onClose={() => setIsServerModalOpen(false)}
+      />
+
+    </div>
+  );
+}

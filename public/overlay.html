@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitch Video Overlay View</title>
+  <script src="/twitch-ext.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes float {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-6px); }
+      100% { transform: translateY(0px); }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 15px rgba(145, 70, 255, 0.4); }
+      50% { box-shadow: 0 0 25px rgba(145, 70, 255, 0.8); }
+    }
+    .animate-float { animation: float 4s ease-in-out infinite; }
+    .animate-glow { animation: pulseGlow 2.5s infinite; }
+    .firework-particle {
+      position: absolute;
+      pointer-events: none;
+      animation: explode 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+    }
+    @keyframes explode {
+      0% { transform: translate(0, 0) scale(1); opacity: 1; }
+      100% { transform: translate(var(--tx), var(--ty)) scale(0.2); opacity: 0; }
+    }
+  </style>
+</head>
+<body class="bg-transparent text-white font-sans select-none overflow-hidden h-screen w-screen p-3 flex flex-col justify-between">
+  
+  <!-- Simulated Video Stream Background overlay marker -->
+  <div class="absolute inset-0 pointer-events-none border-2 border-dashed border-purple-500/30 rounded-lg flex items-center justify-center">
+    <span class="text-xs font-mono text-purple-400/40 uppercase tracking-widest bg-black/40 px-3 py-1 rounded backdrop-blur-sm">
+      Twitch Video Overlay (1080p Interactive Layer)
+    </span>
+  </div>
+
+  <!-- Container for interactive overlay elements -->
+  <div class="relative z-10 flex items-start justify-between w-full">
+    
+    <!-- Top Left: EBS Status & Live Stream Badge -->
+    <div class="bg-[#18181B]/90 backdrop-blur-md border border-[#2D2D30] rounded-lg p-2.5 shadow-xl max-w-xs transition-all hover:bg-[#18181B]">
+      <div class="flex items-center justify-between gap-2 mb-1.5">
+        <div class="flex items-center gap-1.5">
+          <span id="ebs-status-dot" class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+          <span class="text-xs font-semibold text-[#EFEFF1]">EBS Connection</span>
+        </div>
+        <span id="ebs-latency" class="text-[10px] font-mono bg-[#1F1F23] text-[#ADADB8] px-1.5 py-0.5 rounded border border-[#2D2D30]">
+          checking...
+        </span>
+      </div>
+      <div class="text-[11px] text-[#ADADB8] flex flex-col gap-0.5 font-mono">
+        <div class="flex justify-between"><span>Endpoint:</span> <span class="text-[#EFEFF1] truncate">/api/ebs</span></div>
+        <div class="flex justify-between"><span>Last Sync:</span> <span id="last-sync-time" class="text-[#EFEFF1]">--:--:--</span></div>
+      </div>
+      <button id="btn-ping" class="mt-2 w-full text-xs font-medium bg-[#9146FF] hover:bg-[#772ce8] text-white py-1 px-2 rounded transition flex items-center justify-center gap-1.5">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Ping EBS Server
+      </button>
+    </div>
+
+    <!-- Top Right: Broadcaster Announcement Banner (Configurable via config.html) -->
+    <div id="announcement-card" class="bg-[#18181B]/90 backdrop-blur-md border border-[#9146FF]/50 rounded-lg p-2.5 shadow-xl max-w-sm animate-glow transition-all">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-[10px] uppercase font-bold bg-[#9146FF] text-white px-2 py-0.5 rounded tracking-wide">
+          Stream Alert
+        </span>
+        <span id="announcement-title" class="text-xs font-bold text-[#EFEFF1] truncate">Community Interactive Hub</span>
+      </div>
+      <p id="announcement-body" class="text-xs text-[#ADADB8] line-clamp-2">
+        Welcome to the stream! Click around in panels to interact.
+      </p>
+    </div>
+  </div>
+
+  <!-- Center Area: Live Fireworks / Stream Reactions Zone -->
+  <div id="fireworks-container" class="absolute inset-0 pointer-events-none z-20 overflow-hidden"></div>
+
+  <!-- Center Interactive Alert Pop-up -->
+  <div id="live-alert" class="hidden relative z-30 mx-auto bg-[#18181B] border-2 border-[#9146FF] p-4 rounded-lg shadow-2xl backdrop-blur-lg max-w-md text-center transform transition-all">
+    <div class="text-2xl mb-1">✨ 👾 🎉</div>
+    <div id="alert-title" class="text-sm font-bold text-[#9146FF] uppercase tracking-wide">Live Broadcast Event</div>
+    <div id="alert-message" class="text-sm text-[#EFEFF1] font-medium mt-1">A viewer triggered stream hype!</div>
+  </div>
+
+  <!-- Bottom Bar: Live Interactive Poll & Message Feed -->
+  <div class="relative z-10 flex items-end justify-between w-full gap-4">
+    
+    <!-- Left: Live Poll HUD Widget -->
+    <div class="bg-[#18181B]/95 backdrop-blur-md border border-[#2D2D30] rounded-lg p-3 shadow-xl max-w-md w-full">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-bold text-[#9146FF] uppercase tracking-wider flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-green-500"></span>
+          Live Stream Poll
+        </span>
+        <span id="poll-total-votes" class="text-[11px] font-mono text-[#ADADB8]">0 votes</span>
+      </div>
+      <div id="poll-question" class="text-xs font-semibold text-[#EFEFF1] mb-2">
+        Which game should we play next?
+      </div>
+      <div id="poll-bars" class="space-y-1.5">
+        <!-- Injected via JavaScript -->
+        <div class="text-xs text-[#ADADB8]">Loading poll state...</div>
+      </div>
+    </div>
+
+    <!-- Right: EBS Event Log for Developer Testing -->
+    <div class="bg-[#0E0E10]/95 backdrop-blur-md border border-[#2D2D30] rounded-lg p-2.5 shadow-xl max-w-xs w-full">
+      <div class="flex items-center justify-between text-[11px] text-[#ADADB8] mb-1 border-b border-[#2D2D30] pb-1">
+        <span class="font-mono font-semibold text-[#EFEFF1]">Overlay Message Log</span>
+        <button id="btn-clear-log" class="text-[10px] text-[#ADADB8] hover:text-[#EFEFF1]">Clear</button>
+      </div>
+      <div id="event-log" class="h-20 overflow-y-auto text-[10px] font-mono space-y-1 text-[#ADADB8] scrollbar-thin">
+        <div class="text-[#ADADB8]">[system] Overlay initialized</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const logBox = document.getElementById('event-log');
+    const ebsDot = document.getElementById('ebs-status-dot');
+    const ebsLatency = document.getElementById('ebs-latency');
+    const lastSyncTime = document.getElementById('last-sync-time');
+    const announcementTitle = document.getElementById('announcement-title');
+    const announcementBody = document.getElementById('announcement-body');
+    const liveAlert = document.getElementById('live-alert');
+    const alertTitle = document.getElementById('alert-title');
+    const alertMessage = document.getElementById('alert-message');
+    const pollQuestion = document.getElementById('poll-question');
+    const pollBars = document.getElementById('poll-bars');
+    const pollTotalVotes = document.getElementById('poll-total-votes');
+
+    function log(msg, type = 'info') {
+      const el = document.createElement('div');
+      const time = new Date().toLocaleTimeString().split(' ')[0];
+      el.className = type === 'error' ? 'text-rose-400' : type === 'success' ? 'text-emerald-400' : type === 'event' ? 'text-purple-300' : 'text-neutral-300';
+      el.textContent = `[${time}] ${msg}`;
+      logBox.appendChild(el);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    document.getElementById('btn-clear-log').addEventListener('click', () => {
+      logBox.innerHTML = '<div class="text-neutral-500">[system] Log cleared</div>';
+    });
+
+    // Test EBS connectivity
+    async function testEbsPing() {
+      try {
+        ebsDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping';
+        const res = await window.Twitch.ext.ebs.ping();
+        ebsDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+        ebsLatency.textContent = `${res.latencyMs}ms (${res.status})`;
+        lastSyncTime.textContent = new Date().toLocaleTimeString();
+        log(`EBS Ping OK: ${res.latencyMs}ms, uptime ${Math.round(res.uptime || 0)}s`, 'success');
+      } catch (err) {
+        ebsDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+        ebsLatency.textContent = 'Offline';
+        log(`EBS Ping Failed: ${err.message}`, 'error');
+      }
+    }
+
+    document.getElementById('btn-ping').addEventListener('click', testEbsPing);
+
+    // Fetch and render state from EBS
+    async function fetchEbsState() {
+      try {
+        const state = await window.Twitch.ext.ebs.getState();
+        if (state && state.config) {
+          announcementTitle.textContent = state.config.title || 'Stream Overlay';
+          announcementBody.textContent = state.config.welcomeMessage || 'Enjoy the stream!';
+          if (state.config.pollQuestion) pollQuestion.textContent = state.config.pollQuestion;
+        }
+        if (state && state.poll) {
+          renderPoll(state.poll);
+        }
+        lastSyncTime.textContent = new Date().toLocaleTimeString();
+      } catch (e) {
+        console.warn('EBS state fetch error:', e);
+      }
+    }
+
+    function renderPoll(poll) {
+      if (!poll || !poll.options) return;
+      pollQuestion.textContent = poll.question || 'Live Poll';
+      pollTotalVotes.textContent = `${poll.totalVotes || 0} votes`;
+      
+      const total = poll.totalVotes || 1;
+      pollBars.innerHTML = poll.options.map(opt => {
+        const pct = Math.round(((opt.votes || 0) / (total === 0 ? 1 : total)) * 100);
+        return `
+          <div class="space-y-0.5">
+            <div class="flex justify-between text-[11px]">
+              <span class="font-medium text-neutral-200">${opt.text}</span>
+              <span class="text-neutral-400 font-mono">${opt.votes || 0} (${pct}%)</span>
+            </div>
+            <div class="h-1.5 w-full bg-neutral-800 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-purple-600 to-indigo-500 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Trigger visual fireworks reaction
+    function triggerFireworks() {
+      const container = document.getElementById('fireworks-container');
+      const colors = ['#9146FF', '#00F0FF', '#FF0055', '#FFD700', '#00FF66'];
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+
+      for (let i = 0; i < 40; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'firework-particle rounded-full';
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const size = Math.random() * 8 + 4;
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * 260 + 40;
+        const tx = Math.cos(angle) * dist;
+        const ty = Math.sin(angle) * dist;
+
+        particle.style.left = `${cx}px`;
+        particle.style.top = `${cy}px`;
+        particle.style.width = `${size}px`;
+        particle.style.height = `${size}px`;
+        particle.style.backgroundColor = color;
+        particle.style.setProperty('--tx', `${tx}px`);
+        particle.style.setProperty('--ty', `${ty}px`);
+        particle.style.boxShadow = `0 0 10px ${color}`;
+
+        container.appendChild(particle);
+        setTimeout(() => particle.remove(), 1200);
+      }
+    }
+
+    function showPopupAlert(title, message) {
+      alertTitle.textContent = title;
+      alertMessage.textContent = message;
+      liveAlert.classList.remove('hidden');
+      triggerFireworks();
+      setTimeout(() => {
+        liveAlert.classList.add('hidden');
+      }, 4000);
+    }
+
+    // Initialize Twitch Extension bindings
+    if (window.Twitch && window.Twitch.ext) {
+      window.Twitch.ext.onAuthorized((auth) => {
+        log(`Twitch Auth received for Channel: ${auth.channelId}`, 'info');
+        testEbsPing();
+        fetchEbsState();
+      });
+
+      window.Twitch.ext.onContext((context) => {
+        log(`Twitch Context updated (Theme: ${context.theme}, Res: ${context.displayResolution})`, 'info');
+      });
+
+      window.Twitch.ext.configuration.onChanged(() => {
+        const config = window.Twitch.ext.configuration.broadcaster;
+        if (config && config.content) {
+          try {
+            const parsed = JSON.parse(config.content);
+            if (parsed.title) announcementTitle.textContent = parsed.title;
+            if (parsed.welcomeMessage) announcementBody.textContent = parsed.welcomeMessage;
+            if (parsed.pollQuestion) pollQuestion.textContent = parsed.pollQuestion;
+            log('Config updated from Broadcaster Settings', 'event');
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      });
+
+      // Listen to broadcast events
+      window.Twitch.ext.listen('broadcast', (target, contentType, message) => {
+        try {
+          const data = typeof message === 'string' ? JSON.parse(message) : message;
+          log(`PubSub Broadcast: ${data.type || 'message'}`, 'event');
+          
+          if (data.type === 'ALERT' || data.type === 'HYPE_ALERT') {
+            showPopupAlert(data.title || 'Twitch Stream Alert', data.message || 'Stream notification triggered!');
+          } else if (data.type === 'POLL_UPDATE') {
+            renderPoll(data.poll);
+          } else if (data.type === 'CONFIG_UPDATE') {
+            if (data.config) {
+              announcementTitle.textContent = data.config.title || 'Stream Overlay';
+              announcementBody.textContent = data.config.welcomeMessage || 'Enjoy the stream!';
+            }
+          }
+        } catch (e) {
+          log(`PubSub raw: ${message}`, 'event');
+        }
+      });
+    }
+
+    // Heartbeat every 8s
+    setInterval(() => {
+      fetchEbsState();
+    }, 8000);
+  </script>
+</body>
+</html>

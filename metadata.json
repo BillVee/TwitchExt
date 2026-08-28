@@ -1,0 +1,7 @@
+{
+  "name": "Twitch Extension Developer Rig & EBS Template",
+  "description": "A responsive test harness and EBS backend template for building and testing Twitch extensions with Overlay, Panels, Config, SSL generation, and EBS communication testing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

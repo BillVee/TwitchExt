@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitch Extension Panel 2</title>
+  <script src="/twitch-ext.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#18181B] text-[#EFEFF1] font-sans p-3 min-h-screen flex flex-col justify-between text-xs select-none">
+  
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center justify-between border-b border-[#2D2D30] pb-2">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded bg-indigo-600 flex items-center justify-center font-bold text-white text-xs">
+          P2
+        </div>
+        <div>
+          <h1 class="font-semibold text-[#EFEFF1] text-sm">Rewards & Bits</h1>
+          <p class="text-[10px] text-[#ADADB8]">Twitch Component / Panel 2</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 bg-[#0E0E10] px-2 py-1 rounded border border-[#2D2D30]">
+        <span id="ebs-status-dot" class="w-2 h-2 rounded-full bg-green-500"></span>
+        <span id="ebs-status-text" class="text-[10px] font-mono text-indigo-400">Checking...</span>
+      </div>
+    </div>
+
+    <!-- Twitch Bits Simulator Card (Demonstrates EBS transaction flow) -->
+    <div class="bg-[#0E0E10] border border-[#2D2D30] rounded-lg p-2.5 space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-[#EFEFF1] flex items-center gap-1">
+          <span class="text-amber-400">💎</span> Twitch Bits Rewards
+        </span>
+        <span class="text-[9px] font-mono bg-[#1F1F23] text-indigo-400 px-1.5 py-0.5 rounded border border-[#2D2D30]">
+          EBS Sync
+        </span>
+      </div>
+      <p class="text-[11px] text-[#ADADB8]">
+        Clicking a reward sends a request to the EBS backend, triggering live overlay fireworks!
+      </p>
+
+      <div class="space-y-1.5 pt-1">
+        <button id="btn-bits-fireworks" class="w-full bg-[#18181B] hover:bg-[#1F1F23] border border-[#2D2D30] hover:border-amber-500/50 p-2 rounded flex items-center justify-between transition group">
+          <div class="flex items-center gap-2 text-left">
+            <span class="text-base group-hover:scale-110 transition">🎆</span>
+            <div>
+              <div class="font-semibold text-[#EFEFF1] text-xs">Stream Fireworks</div>
+              <div class="text-[10px] text-[#ADADB8]">Trigger explosive visual FX on overlay</div>
+            </div>
+          </div>
+          <span class="font-bold text-amber-400 bg-amber-950/60 px-2 py-1 rounded border border-amber-800/60 text-[10px] whitespace-nowrap">
+            100 Bits
+          </span>
+        </button>
+
+        <button id="btn-bits-boost" class="w-full bg-[#18181B] hover:bg-[#1F1F23] border border-[#2D2D30] hover:border-indigo-500/50 p-2 rounded flex items-center justify-between transition group">
+          <div class="flex items-center gap-2 text-left">
+            <span class="text-base group-hover:scale-110 transition">⚡</span>
+            <div>
+              <div class="font-semibold text-[#EFEFF1] text-xs">Poll Super Booster</div>
+              <div class="text-[10px] text-[#ADADB8]">Adds +5 votes to current top choice</div>
+            </div>
+          </div>
+          <span class="font-bold text-indigo-400 bg-indigo-950/60 px-2 py-1 rounded border border-indigo-800/60 text-[10px] whitespace-nowrap">
+            50 Bits
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Community Leaderboard (Stored & updated in EBS state) -->
+    <div class="bg-[#0E0E10] border border-[#2D2D30] rounded-lg p-2.5 space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="font-semibold text-[#EFEFF1] text-xs flex items-center gap-1.5">
+          <span class="text-amber-400">🏆</span> Top Supporters
+        </span>
+        <button id="btn-refresh-board" class="text-[10px] text-[#ADADB8] hover:text-[#EFEFF1] flex items-center gap-1">
+          <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Refresh
+        </button>
+      </div>
+      
+      <div id="leaderboard-list" class="space-y-1">
+        <!-- Rendered via JS -->
+        <div class="text-neutral-500 text-center py-2">Loading leaderboard...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer Event Log -->
+  <div class="mt-3 pt-2 border-t border-neutral-800">
+    <div class="flex items-center justify-between text-[10px] text-neutral-400 mb-1">
+      <span class="font-mono">Panel 2 Activity Log</span>
+      <button id="btn-clear-p2" class="text-neutral-500 hover:text-neutral-300">Clear</button>
+    </div>
+    <div id="p2-log-box" class="h-16 overflow-y-auto font-mono text-[10px] space-y-0.5 text-neutral-400 bg-neutral-950 p-1.5 rounded border border-neutral-800/80">
+      <div>[ready] Panel 2 initialized</div>
+    </div>
+  </div>
+
+  <script>
+    const logBox = document.getElementById('p2-log-box');
+    const ebsDot = document.getElementById('ebs-status-dot');
+    const ebsStatusText = document.getElementById('ebs-status-text');
+    const leaderboardList = document.getElementById('leaderboard-list');
+
+    function log(msg, type = 'info') {
+      const el = document.createElement('div');
+      const time = new Date().toLocaleTimeString().split(' ')[0];
+      el.className = type === 'error' ? 'text-rose-400' : type === 'success' ? 'text-emerald-400' : type === 'event' ? 'text-indigo-300' : 'text-neutral-400';
+      el.textContent = `[${time}] ${msg}`;
+      logBox.appendChild(el);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    document.getElementById('btn-clear-p2').addEventListener('click', () => {
+      logBox.innerHTML = '<div>[ready] Log cleared</div>';
+    });
+
+    async function checkEbs() {
+      try {
+        const res = await window.Twitch.ext.ebs.ping();
+        ebsDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        ebsStatusText.textContent = `${res.latencyMs}ms`;
+        log(`EBS Ping OK (${res.latencyMs}ms)`, 'success');
+      } catch (e) {
+        ebsDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+        ebsStatusText.textContent = 'Offline';
+        log(`EBS check failed: ${e.message}`, 'error');
+      }
+    }
+
+    async function loadLeaderboard() {
+      try {
+        const state = await window.Twitch.ext.ebs.getState();
+        if (state && state.leaderboard) {
+          renderLeaderboard(state.leaderboard);
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    function renderLeaderboard(board) {
+      if (!board || board.length === 0) {
+        leaderboardList.innerHTML = '<div class="text-neutral-500 text-center py-2">No supporters yet</div>';
+        return;
+      }
+      leaderboardList.innerHTML = board.map((item, idx) => {
+        const rankColor = idx === 0 ? 'text-amber-400 font-bold' : idx === 1 ? 'text-neutral-300 font-bold' : idx === 2 ? 'text-amber-600 font-bold' : 'text-neutral-500';
+        return `
+          <div class="flex items-center justify-between p-1.5 rounded bg-neutral-900/90 text-xs border border-neutral-800/60">
+            <div class="flex items-center gap-2">
+              <span class="w-4 font-mono text-[10px] ${rankColor}">#${idx + 1}</span>
+              <span class="font-medium text-neutral-200">${item.username}</span>
+            </div>
+            <span class="font-mono text-[11px] text-amber-400 font-semibold">${item.score} pts</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('btn-refresh-board').addEventListener('click', loadLeaderboard);
+
+    // Bits fireworks click
+    document.getElementById('btn-bits-fireworks').addEventListener('click', async () => {
+      log('Simulating 100 Bits cheer via EBS...', 'event');
+      try {
+        const res = await window.Twitch.ext.ebs.sendAction('BITS_CHEER', {
+          sku: 'bits_hype_100',
+          amount: 100,
+          user: 'PixelChampion'
+        });
+        log('Bits cheer processed! Fireworks sent to Overlay view.', 'success');
+        if (res && res.leaderboard) renderLeaderboard(res.leaderboard);
+      } catch (e) {
+        log(`Bits error: ${e.message}`, 'error');
+      }
+    });
+
+    // Poll super boost click
+    document.getElementById('btn-bits-boost').addEventListener('click', async () => {
+      log('Sending Poll Booster to EBS...', 'event');
+      try {
+        await window.Twitch.ext.ebs.sendAction('POLL_BOOST', { boostVotes: 5 });
+        log('Boost applied! Panels and Overlay updated.', 'success');
+      } catch (e) {
+        log(`Boost error: ${e.message}`, 'error');
+      }
+    });
+
+    if (window.Twitch && window.Twitch.ext) {
+      window.Twitch.ext.onAuthorized(() => {
+        checkEbs();
+        loadLeaderboard();
+      });
+
+      window.Twitch.ext.listen('broadcast', (target, contentType, message) => {
+        try {
+          const data = typeof message === 'string' ? JSON.parse(message) : message;
+          if (data.type === 'LEADERBOARD_UPDATE' && data.leaderboard) {
+            renderLeaderboard(data.leaderboard);
+            log('Leaderboard updated via PubSub', 'event');
+          }
+        } catch(e){}
+      });
+    }
+
+    setInterval(loadLeaderboard, 12000);
+  </script>
+</body>
+</html>

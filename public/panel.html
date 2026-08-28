@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitch Extension Panel 1</title>
+  <script src="/twitch-ext.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#18181B] text-[#EFEFF1] font-sans p-3 min-h-screen flex flex-col justify-between text-xs select-none">
+  
+  <div class="space-y-3">
+    <!-- Header -->
+    <div class="flex items-center justify-between border-b border-[#2D2D30] pb-2">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded bg-[#9146FF] flex items-center justify-center font-bold text-white text-xs">
+          P1
+        </div>
+        <div>
+          <h1 id="ext-title" class="font-semibold text-[#EFEFF1] text-sm">Interactive Hub</h1>
+          <p class="text-[10px] text-[#ADADB8]">Twitch Extension Panel View</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 bg-[#0E0E10] px-2 py-1 rounded border border-[#2D2D30]">
+        <span id="ebs-dot" class="w-2 h-2 rounded-full bg-green-500"></span>
+        <span id="ebs-status" class="text-[10px] font-mono text-[#9146FF]">Checking...</span>
+      </div>
+    </div>
+
+    <!-- EBS Diagnostic Card -->
+    <div class="bg-[#0E0E10] border border-[#2D2D30] rounded-lg p-2.5 space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-[#EFEFF1] flex items-center gap-1">
+          <svg class="w-3.5 h-3.5 text-[#9146FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
+          EBS Communication
+        </span>
+        <button id="btn-ping-ebs" class="bg-[#1F1F23] hover:bg-[#2D2D30] text-[#ADADB8] hover:text-[#EFEFF1] px-2 py-0.5 rounded text-[10px] font-medium transition flex items-center gap-1 border border-[#2D2D30]">
+          <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Ping
+        </button>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-[10px] text-[#ADADB8] font-mono">
+        <div class="bg-[#18181B] p-1.5 rounded border border-[#2D2D30]">
+          <div class="text-[#ADADB8]">Latency:</div>
+          <div id="ebs-latency-val" class="text-green-500 font-bold">-- ms</div>
+        </div>
+        <div class="bg-[#18181B] p-1.5 rounded border border-[#2D2D30]">
+          <div class="text-[#ADADB8]">EBS Uptime:</div>
+          <div id="ebs-uptime-val" class="text-[#EFEFF1]">-- s</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Interactive Stream Poll (Synced with EBS) -->
+    <div class="bg-[#0E0E10] border border-[#2D2D30] rounded-lg p-2.5 space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-green-500"></span>
+          <span class="font-semibold text-[#EFEFF1] text-xs">Community Poll</span>
+        </div>
+        <span id="poll-votes-counter" class="text-[10px] font-mono text-[#ADADB8]">0 votes</span>
+      </div>
+      
+      <p id="poll-question-text" class="text-xs text-[#ADADB8] font-medium">
+        Which game should we play next?
+      </p>
+
+      <div id="poll-options-container" class="space-y-1.5 pt-1">
+        <!-- Rendered dynamically -->
+        <div class="text-[#ADADB8] text-center py-2">Loading options...</div>
+      </div>
+    </div>
+
+    <!-- Interactive Actions -->
+    <div class="bg-[#0E0E10] border border-[#2D2D30] rounded-lg p-2.5 space-y-2">
+      <div class="font-semibold text-[#EFEFF1] text-[11px] flex items-center justify-between">
+        <span>Quick Stream Triggers</span>
+        <span class="text-[9px] text-[#9146FF] uppercase font-mono">Simulate</span>
+      </div>
+      <div class="grid grid-cols-2 gap-1.5">
+        <button id="btn-trigger-hype" class="bg-[#9146FF] hover:bg-[#772ce8] text-white font-semibold py-1.5 px-2 rounded transition text-[11px] flex items-center justify-center gap-1 shadow">
+          <span>🎉</span> Stream Hype
+        </button>
+        <button id="btn-send-message" class="bg-[#1F1F23] hover:bg-[#2D2D30] text-[#EFEFF1] font-medium py-1.5 px-2 rounded transition text-[11px] flex items-center justify-center gap-1 border border-[#2D2D30]">
+          <span>📢</span> Send PubSub
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer Event Log -->
+  <div class="mt-3 pt-2 border-t border-neutral-800">
+    <div class="flex items-center justify-between text-[10px] text-neutral-400 mb-1">
+      <span class="font-mono">Panel 1 Activity Log</span>
+      <button id="btn-clear" class="text-neutral-500 hover:text-neutral-300">Clear</button>
+    </div>
+    <div id="log-box" class="h-16 overflow-y-auto font-mono text-[10px] space-y-0.5 text-neutral-400 bg-neutral-950 p-1.5 rounded border border-neutral-800/80">
+      <div>[ready] Panel 1 initialized</div>
+    </div>
+  </div>
+
+  <script>
+    const logBox = document.getElementById('log-box');
+    const ebsDot = document.getElementById('ebs-dot');
+    const ebsStatus = document.getElementById('ebs-status');
+    const ebsLatencyVal = document.getElementById('ebs-latency-val');
+    const ebsUptimeVal = document.getElementById('ebs-uptime-val');
+    const extTitle = document.getElementById('ext-title');
+    const pollQuestionText = document.getElementById('poll-question-text');
+    const pollOptionsContainer = document.getElementById('poll-options-container');
+    const pollVotesCounter = document.getElementById('poll-votes-counter');
+
+    let currentPollState = null;
+    let hasVotedIndex = null;
+
+    function log(msg, type = 'info') {
+      const el = document.createElement('div');
+      const time = new Date().toLocaleTimeString().split(' ')[0];
+      el.className = type === 'error' ? 'text-rose-400' : type === 'success' ? 'text-emerald-400' : type === 'event' ? 'text-purple-300' : 'text-neutral-400';
+      el.textContent = `[${time}] ${msg}`;
+      logBox.appendChild(el);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      logBox.innerHTML = '<div>[ready] Log cleared</div>';
+    });
+
+    async function checkEbs() {
+      try {
+        const res = await window.Twitch.ext.ebs.ping();
+        ebsDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        ebsStatus.textContent = `${res.latencyMs}ms`;
+        ebsLatencyVal.textContent = `${res.latencyMs} ms`;
+        ebsUptimeVal.textContent = `${Math.round(res.uptime || 0)} s`;
+        log(`EBS Ping OK (${res.latencyMs}ms)`, 'success');
+      } catch (err) {
+        ebsDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+        ebsStatus.textContent = 'Offline';
+        ebsLatencyVal.textContent = 'Failed';
+        log(`EBS error: ${err.message}`, 'error');
+      }
+    }
+
+    document.getElementById('btn-ping-ebs').addEventListener('click', checkEbs);
+
+    async function loadEbsState() {
+      try {
+        const state = await window.Twitch.ext.ebs.getState();
+        if (state && state.config && state.config.title) {
+          extTitle.textContent = state.config.title;
+        }
+        if (state && state.poll) {
+          currentPollState = state.poll;
+          renderPoll();
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    function renderPoll() {
+      if (!currentPollState || !currentPollState.options) return;
+      pollQuestionText.textContent = currentPollState.question || 'Live Poll';
+      pollVotesCounter.textContent = `${currentPollState.totalVotes || 0} votes`;
+      
+      const total = currentPollState.totalVotes || 0;
+
+      pollOptionsContainer.innerHTML = currentPollState.options.map((opt, idx) => {
+        const pct = total > 0 ? Math.round(((opt.votes || 0) / total) * 100) : 0;
+        const isVoted = hasVotedIndex === idx;
+        return `
+          <button onclick="voteOption(${idx})" class="w-full text-left p-2 rounded bg-neutral-900 hover:bg-neutral-850 border ${isVoted ? 'border-purple-500 bg-purple-950/40' : 'border-neutral-800'} transition relative overflow-hidden group">
+            <div class="absolute inset-y-0 left-0 bg-purple-600/20 rounded transition-all duration-300" style="width: ${pct}%"></div>
+            <div class="relative flex items-center justify-between text-xs">
+              <span class="font-medium ${isVoted ? 'text-purple-300 font-bold' : 'text-neutral-200'}">${opt.text} ${isVoted ? '✓' : ''}</span>
+              <span class="font-mono text-[10px] text-neutral-400">${opt.votes || 0} (${pct}%)</span>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    window.voteOption = async function(idx) {
+      hasVotedIndex = idx;
+      log(`Submitting vote for option ${idx + 1}...`, 'info');
+      try {
+        const res = await window.Twitch.ext.ebs.sendAction('VOTE', { optionIndex: idx });
+        if (res && res.poll) {
+          currentPollState = res.poll;
+          renderPoll();
+          log('Vote registered with EBS successfully!', 'success');
+        }
+      } catch (e) {
+        log(`Vote failed: ${e.message}`, 'error');
+      }
+    };
+
+    document.getElementById('btn-trigger-hype').addEventListener('click', async () => {
+      log('Triggering stream hype event via EBS...', 'event');
+      try {
+        await window.Twitch.ext.ebs.sendAction('HYPE_ALERT', {
+          title: '🔥 Panel 1 Hype Bomb!',
+          message: 'Viewer in Panel 1 ignited the stream overlay!'
+        });
+        log('Hype event sent to EBS & Broadcasted', 'success');
+      } catch (e) {
+        log(`Hype failed: ${e.message}`, 'error');
+      }
+    });
+
+    document.getElementById('btn-send-message').addEventListener('click', () => {
+      const msg = { type: 'ALERT', title: 'Panel 1 Notification', message: 'Hello from Panel 1 extension!' };
+      window.Twitch.ext.send('broadcast', 'application/json', msg);
+      log('Sent PubSub broadcast message', 'event');
+    });
+
+    if (window.Twitch && window.Twitch.ext) {
+      window.Twitch.ext.onAuthorized(() => {
+        checkEbs();
+        loadEbsState();
+      });
+
+      window.Twitch.ext.configuration.onChanged(() => {
+        const config = window.Twitch.ext.configuration.broadcaster;
+        if (config && config.content) {
+          try {
+            const data = JSON.parse(config.content);
+            if (data.title) extTitle.textContent = data.title;
+          } catch(e){}
+        }
+      });
+
+      window.Twitch.ext.listen('broadcast', (target, contentType, message) => {
+        try {
+          const data = typeof message === 'string' ? JSON.parse(message) : message;
+          if (data.type === 'POLL_UPDATE' && data.poll) {
+            currentPollState = data.poll;
+            renderPoll();
+            log('Poll updated via PubSub', 'event');
+          } else if (data.type === 'CONFIG_UPDATE' && data.config) {
+            if (data.config.title) extTitle.textContent = data.config.title;
+          }
+        } catch(e){}
+      });
+    }
+
+    setInterval(loadEbsState, 10000);
+  </script>
+</body>
+</html>
