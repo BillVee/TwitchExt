@@ -40,12 +40,20 @@ PORT=3000
 HOST=0.0.0.0
 NODE_ENV=development
 
+# SSL / HTTPS Configuration (true = HTTPS with node-forge SSL, false = standard HTTP)
+USE_SSL=true
+
+# Twitch Extension Panel Dimensions (Twitch specification allows 100px to 500px height)
+PANEL_HEIGHT=500
+PANEL1_HEIGHT=500
+PANEL2_HEIGHT=500
+
 # Twitch Extension Credentials (dev.twitch.tv/console/extensions)
 TWITCH_EXTENSION_CLIENT_ID=your_twitch_extension_client_id_here
 TWITCH_EXTENSION_SECRET=your_base64_extension_secret_here
 TWITCH_OWNER_ID=your_twitch_broadcaster_user_id_here
 
-# Optional Custom SSL paths (If omitted, node-forge generates them automatically)
+# Optional Custom SSL paths (If omitted and USE_SSL=true, node-forge generates them automatically)
 # SSL_KEY_PATH=./ssl/server.key
 # SSL_CERT_PATH=./ssl/server.cert`;
 

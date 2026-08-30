@@ -7,8 +7,18 @@
   <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
   <script src="/twitch-ext.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Twitch Panel standard custom scrollbars */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #18181B; }
+    ::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: #9146FF; }
+    html, body {
+      box-sizing: border-box;
+    }
+  </style>
 </head>
-<body class="bg-[#18181B] text-[#EFEFF1] font-sans p-3 min-h-screen flex flex-col justify-between text-xs select-none">
+<body id="panel-body" class="bg-[#18181B] text-[#EFEFF1] font-sans p-3 flex flex-col justify-between text-xs select-none overflow-y-auto">
   
   <div class="space-y-3">
     <!-- Header -->
@@ -145,8 +155,38 @@
 
     document.getElementById('btn-ping-ebs').addEventListener('click', checkEbs);
 
+    // Apply panel height based on query parameter (?height=300) or EBS config (100 - 500px)
+    function applyHeight(h) {
+      if (!h) return;
+      const num = parseInt(h, 10);
+      if (isNaN(num)) return;
+      const clamped = Math.max(100, Math.min(500, num));
+      const body = document.getElementById('panel-body') || document.body;
+      body.style.minHeight = clamped + 'px';
+      body.style.maxHeight = clamped + 'px';
+      body.style.height = clamped + 'px';
+      document.documentElement.style.height = clamped + 'px';
+      log(`Panel 1 height adjusted to ${clamped}px`, 'info');
+    }
+
+    // Check query params immediately
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryHeight = urlParams.get('height') || urlParams.get('h') || urlParams.get('panel1Height');
+    if (queryHeight) {
+      applyHeight(queryHeight);
+    }
+
     async function loadEbsState() {
       try {
+        if (!queryHeight && window.Twitch && window.Twitch.ext && window.Twitch.ext.ebs) {
+          try {
+            const configRes = await window.Twitch.ext.ebs.fetchConfig();
+            if (configRes && (configRes.panel1Height || configRes.panelHeight)) {
+              applyHeight(configRes.panel1Height || configRes.panelHeight);
+            }
+          } catch(err){}
+        }
+
         const state = await window.Twitch.ext.ebs.getState();
         if (state && state.config && state.config.title) {
           extTitle.textContent = state.config.title;

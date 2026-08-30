@@ -10,6 +10,7 @@
 
 import express from 'express';
 import https from 'https';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -30,9 +31,31 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
+
+// Toggle between HTTPS (SSL) and standard HTTP
+// Enabled by default (true) for Twitch extensions, set USE_SSL=false in .env for standard HTTP
+const USE_SSL = process.env.USE_SSL !== undefined
+  ? (process.env.USE_SSL.toLowerCase() === 'true' || process.env.USE_SSL === '1')
+  : (process.env.ENABLE_HTTPS !== undefined
+      ? (process.env.ENABLE_HTTPS.toLowerCase() === 'true' || process.env.ENABLE_HTTPS === '1')
+      : (process.env.PROTOCOL ? process.env.PROTOCOL.toLowerCase() === 'https' : true));
+
 const TWITCH_EXTENSION_CLIENT_ID = process.env.TWITCH_EXTENSION_CLIENT_ID || process.env.TWITCH_CLIENT_ID || '';
 const TWITCH_EXTENSION_SECRET = process.env.TWITCH_EXTENSION_SECRET || '';
 const TWITCH_OWNER_ID = process.env.TWITCH_OWNER_ID || '12345678';
+
+// Helper to clamp Twitch Panel height within Twitch Extension specification (100px to 500px)
+function clampPanelHeight(val, defaultVal = 500) {
+  if (val === undefined || val === null || val === '') return defaultVal;
+  const parsed = parseInt(String(val), 10);
+  if (isNaN(parsed)) return defaultVal;
+  return Math.max(100, Math.min(500, parsed));
+}
+
+// Configurable panel heights from .env (Values between 100 and 500)
+const DEFAULT_PANEL_HEIGHT = clampPanelHeight(process.env.PANEL_HEIGHT, 500);
+const PANEL1_HEIGHT = clampPanelHeight(process.env.PANEL1_HEIGHT || process.env.PANEL_1_HEIGHT || process.env.PANEL_HEIGHT, DEFAULT_PANEL_HEIGHT);
+const PANEL2_HEIGHT = clampPanelHeight(process.env.PANEL2_HEIGHT || process.env.PANEL_2_HEIGHT || process.env.PANEL_HEIGHT, DEFAULT_PANEL_HEIGHT);
 
 // Enable CORS for Twitch extension origins & local test rig + Chrome Private Network Access (PNA)
 app.use((req, res, next) => {
@@ -53,6 +76,31 @@ app.use((req, res, next) => {
   // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
+  }
+  next();
+});
+
+// Echo incoming GET file requests and query parameters to the terminal for inspection
+app.use((req, res, next) => {
+  if (req.method === 'GET') {
+    const hasQueryParams = Object.keys(req.query).length > 0;
+    const isFileRequest = path.extname(req.path) !== '' || req.path.includes('.html') || req.path.includes('.js') || req.path.includes('.json');
+
+    if (hasQueryParams || isFileRequest) {
+      const timestamp = new Date().toLocaleTimeString();
+      console.log(`\n================== [INCOMING GET REQUEST] ==================`);
+      console.log(`🕒 Time:       ${timestamp}`);
+      console.log(`📄 Path:       ${req.path}`);
+      console.log(`🔗 Full URL:   ${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`);
+      if (hasQueryParams) {
+        console.log(`🔎 Query Data (${Object.keys(req.query).length} parameter${Object.keys(req.query).length > 1 ? 's' : ''}):`);
+        console.dir(req.query, { depth: null, colors: true });
+      } else {
+        console.log(`🔎 Query Data: (none)`);
+      }
+      console.log(`🌐 Origin:     ${req.headers['origin'] || req.headers['referer'] || 'direct / browser'}`);
+      console.log(`============================================================\n`);
+    }
   }
   next();
 });
@@ -225,6 +273,9 @@ app.get('/api/ebs/config', (req, res) => {
     config: ebsState.config,
     clientId: TWITCH_EXTENSION_CLIENT_ID || undefined,
     channelId: TWITCH_OWNER_ID || req.headers['client-id'] || '12345678',
+    panel1Height: PANEL1_HEIGHT,
+    panel2Height: PANEL2_HEIGHT,
+    panelHeight: DEFAULT_PANEL_HEIGHT,
   });
 });
 
@@ -336,7 +387,11 @@ app.get('/api/ebs/stats', (req, res) => {
   res.json({
     ...ebsState.stats,
     uptimeSeconds: (Date.now() - serverStartTime) / 1000,
-    serverMode: 'HTTPS with node-forge SSL',
+    serverMode: USE_SSL ? 'HTTPS (node-forge SSL)' : 'HTTP (Standard/Non-SSL)',
+    sslEnabled: USE_SSL,
+    port: PORT,
+    panel1Height: PANEL1_HEIGHT,
+    panel2Height: PANEL2_HEIGHT,
   });
 });
 
@@ -359,32 +414,50 @@ app.get('*', (req, res) => {
   if (fs.existsSync(overlayPath)) {
     res.sendFile(overlayPath);
   } else {
-    res.send('Twitch Extension EBS Running on HTTPS');
+    res.send(`Twitch Extension EBS Running on ${USE_SSL ? 'HTTPS' : 'HTTP'}`);
   }
 });
 
 // -------------------------------------------------------------
-// Start HTTPS Server
+// Start Server (HTTPS with node-forge or Standard HTTP)
 // -------------------------------------------------------------
 try {
-  const sslCerts = ensureSslCertificates();
-  const httpsServer = https.createServer(
-    {
-      key: sslCerts.key,
-      cert: sslCerts.cert,
-    },
-    app
-  );
+  if (USE_SSL) {
+    const sslCerts = ensureSslCertificates();
+    const httpsServer = https.createServer(
+      {
+        key: sslCerts.key,
+        cert: sslCerts.cert,
+      },
+      app
+    );
 
-  httpsServer.listen(PORT, HOST, () => {
-    console.log('====================================================');
-    console.log(`🚀 Twitch Extension EBS HTTPS Server running!`);
-    console.log(`🔒 URL: https://localhost:${PORT}`);
-    console.log(`📁 Assets served from: ${publicDir}`);
-    console.log(`🔑 SSL Key: ${KEY_PATH}`);
-    console.log(`📜 SSL Cert: ${CERT_PATH}`);
-    console.log('====================================================');
-  });
+    httpsServer.listen(PORT, HOST, () => {
+      console.log('====================================================');
+      console.log(`🚀 Twitch Extension EBS HTTPS Server running! [SSL: ON]`);
+      console.log(`🔒 URL: https://localhost:${PORT}`);
+      console.log(`📁 Assets served from: ${publicDir}`);
+      console.log(`📏 Panel 1 Height: ${PANEL1_HEIGHT}px (Range: 100-500px)`);
+      console.log(`📏 Panel 2 Height: ${PANEL2_HEIGHT}px (Range: 100-500px)`);
+      console.log(`🔑 SSL Key:  ${KEY_PATH}`);
+      console.log(`📜 SSL Cert: ${CERT_PATH}`);
+      console.log(`💡 To switch to HTTP, set USE_SSL=false in .env`);
+      console.log('====================================================');
+    });
+  } else {
+    const httpServer = http.createServer(app);
+
+    httpServer.listen(PORT, HOST, () => {
+      console.log('====================================================');
+      console.log(`🚀 Twitch Extension EBS HTTP Server running! [SSL: OFF]`);
+      console.log(`🌐 URL: http://localhost:${PORT}`);
+      console.log(`📁 Assets served from: ${publicDir}`);
+      console.log(`📏 Panel 1 Height: ${PANEL1_HEIGHT}px (Range: 100-500px)`);
+      console.log(`📏 Panel 2 Height: ${PANEL2_HEIGHT}px (Range: 100-500px)`);
+      console.log(`💡 To enable HTTPS (SSL), set USE_SSL=true in .env`);
+      console.log('====================================================');
+    });
+  }
 } catch (err) {
-  console.error('[EBS Server Error] Failed to start HTTPS server:', err);
+  console.error(`[EBS Server Error] Failed to start ${USE_SSL ? 'HTTPS' : 'HTTP'} server:`, err);
 }
