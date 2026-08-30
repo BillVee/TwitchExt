@@ -137,19 +137,120 @@
       logBox.innerHTML = '<div>[ready] Log cleared</div>';
     });
 
-    async function checkEbs() {
+    function resolveEbsUrl(endpoint = '/ping') {
       try {
-        const res = await window.Twitch.ext.ebs.ping();
+        const urlParams = new URLSearchParams(window.location.search);
+        const customEbs = urlParams.get('ebs') || urlParams.get('ebsUrl') || urlParams.get('backend');
+        let base = customEbs ? customEbs.replace(/\/$/, '') : '';
+        if (!base && urlParams.get('ebsPort')) {
+          base = `${window.location.protocol}//${window.location.hostname}:${urlParams.get('ebsPort')}/api/ebs`;
+        }
+        if (!base && typeof window.TWITCH_EBS_URL === 'string') {
+          base = window.TWITCH_EBS_URL.replace(/\/$/, '');
+        }
+        if (!base && typeof localStorage !== 'undefined' && localStorage.getItem('TWITCH_EBS_URL')) {
+          base = localStorage.getItem('TWITCH_EBS_URL').replace(/\/$/, '');
+        }
+        if (!base) {
+          base = '/api/ebs';
+        }
+        const cleanEndpoint = endpoint.startsWith('/api/ebs') ? endpoint.replace('/api/ebs', '') : endpoint;
+        const subPath = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
+        return new URL(`${base}${subPath}`, window.location.href).href;
+      } catch (e) {
+        return `/api/ebs${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+      }
+    }
+
+    const getEbs = () => ({
+      ping: async () => {
+        const targetUrl = resolveEbsUrl('/ping');
+        const start = performance.now();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        try {
+          const res = await fetch(targetUrl, {
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          const latency = Math.round(performance.now() - start);
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status} ${res.statusText}`);
+          }
+          const data = await res.json();
+          return { ...data, latencyMs: latency, targetUrl };
+        } catch (err) {
+          clearTimeout(timeoutId);
+          err.targetUrl = targetUrl;
+          throw err;
+        }
+      },
+      getState: async () => {
+        const targetUrl = resolveEbsUrl('/state');
+        const res = await fetch(targetUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+      sendAction: async (action, payload) => {
+        const targetUrl = resolveEbsUrl('/action');
+        const res = await fetch(targetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, payload, sender: '/panel.html' }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+      fetchConfig: async () => {
+        const targetUrl = resolveEbsUrl('/config');
+        const res = await fetch(targetUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+    });
+
+    async function checkEbs() {
+      const pingUrl = resolveEbsUrl('/ping');
+      let targetObj;
+      try {
+        targetObj = new URL(pingUrl, window.location.href);
+      } catch (e) {
+        targetObj = {
+          href: pingUrl,
+          hostname: window.location.hostname || 'localhost',
+          port: window.location.port || (window.location.protocol === 'https:' ? '443' : '80'),
+          protocol: window.location.protocol || 'http:',
+        };
+      }
+      const port = targetObj.port || (targetObj.protocol === 'https:' ? '443' : '80');
+
+      log(`[PING] Connecting to EBS at: ${targetObj.href} (Port: ${port})...`, 'info');
+      ebsDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+      ebsStatus.textContent = 'Checking...';
+
+      try {
+        const ebs = getEbs();
+        const res = await ebs.ping();
         ebsDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
         ebsStatus.textContent = `${res.latencyMs}ms`;
         ebsLatencyVal.textContent = `${res.latencyMs} ms`;
         ebsUptimeVal.textContent = `${Math.round(res.uptime || 0)} s`;
-        log(`EBS Ping OK (${res.latencyMs}ms)`, 'success');
+        log(`✓ EBS Ping OK (${res.latencyMs}ms) | URL: ${targetObj.href} | Port: ${port}`, 'success');
       } catch (err) {
         ebsDot.className = 'w-2 h-2 rounded-full bg-rose-500';
         ebsStatus.textContent = 'Offline';
         ebsLatencyVal.textContent = 'Failed';
-        log(`EBS error: ${err.message}`, 'error');
+
+        const errMsg = err.name === 'AbortError' ? 'Request timed out after 6s' : err.message;
+        log(`❌ EBS Error: ${err.name} - ${errMsg}`, 'error');
+        log(`   Target URL: ${targetObj.href}`, 'error');
+        log(`   Target Host: ${targetObj.hostname} | Target Port: ${port} | Protocol: ${targetObj.protocol}`, 'error');
+        log(`   Page Origin: ${window.location.origin} | Page Path: ${window.location.pathname}`, 'error');
+
+        if (err.name === 'TypeError' || errMsg.toLowerCase().includes('failed to fetch') || errMsg.toLowerCase().includes('networkerror')) {
+          log(`💡 Diagnostic Tip: If EBS is on https://${targetObj.hostname}:${port} with self-signed SSL, open "${targetObj.href}" in a new browser tab to accept the certificate, or start server with USE_SSL=false.`, 'event');
+        }
       }
     }
 
@@ -178,16 +279,17 @@
 
     async function loadEbsState() {
       try {
-        if (!queryHeight && window.Twitch && window.Twitch.ext && window.Twitch.ext.ebs) {
+        const ebs = getEbs();
+        if (!queryHeight) {
           try {
-            const configRes = await window.Twitch.ext.ebs.fetchConfig();
+            const configRes = await ebs.fetchConfig();
             if (configRes && (configRes.panel1Height || configRes.panelHeight)) {
               applyHeight(configRes.panel1Height || configRes.panelHeight);
             }
           } catch(err){}
         }
 
-        const state = await window.Twitch.ext.ebs.getState();
+        const state = await ebs.getState();
         if (state && state.config && state.config.title) {
           extTitle.textContent = state.config.title;
         }
@@ -226,7 +328,8 @@
       hasVotedIndex = idx;
       log(`Submitting vote for option ${idx + 1}...`, 'info');
       try {
-        const res = await window.Twitch.ext.ebs.sendAction('VOTE', { optionIndex: idx });
+        const ebs = getEbs();
+        const res = await ebs.sendAction('VOTE', { optionIndex: idx });
         if (res && res.poll) {
           currentPollState = res.poll;
           renderPoll();
@@ -240,7 +343,8 @@
     document.getElementById('btn-trigger-hype').addEventListener('click', async () => {
       log('Triggering stream hype event via EBS...', 'event');
       try {
-        await window.Twitch.ext.ebs.sendAction('HYPE_ALERT', {
+        const ebs = getEbs();
+        await ebs.sendAction('HYPE_ALERT', {
           title: '🔥 Panel 1 Hype Bomb!',
           message: 'Viewer in Panel 1 ignited the stream overlay!'
         });
@@ -252,9 +356,15 @@
 
     document.getElementById('btn-send-message').addEventListener('click', () => {
       const msg = { type: 'ALERT', title: 'Panel 1 Notification', message: 'Hello from Panel 1 extension!' };
-      window.Twitch.ext.send('broadcast', 'application/json', msg);
+      if (window.Twitch?.ext?.send) {
+        window.Twitch.ext.send('broadcast', 'application/json', msg);
+      }
       log('Sent PubSub broadcast message', 'event');
     });
+
+    // Run connection tests immediately on load
+    checkEbs();
+    loadEbsState();
 
     if (window.Twitch && window.Twitch.ext) {
       window.Twitch.ext.onAuthorized(() => {
@@ -262,7 +372,7 @@
         loadEbsState();
       });
 
-      window.Twitch.ext.configuration.onChanged(() => {
+      window.Twitch.ext.configuration?.onChanged?.(() => {
         const config = window.Twitch.ext.configuration.broadcaster;
         if (config && config.content) {
           try {
@@ -272,7 +382,7 @@
         }
       });
 
-      window.Twitch.ext.listen('broadcast', (target, contentType, message) => {
+      window.Twitch.ext.listen?.('broadcast', (target, contentType, message) => {
         try {
           const data = typeof message === 'string' ? JSON.parse(message) : message;
           if (data.type === 'POLL_UPDATE' && data.poll) {
@@ -286,7 +396,7 @@
       });
     }
 
-    setInterval(loadEbsState, 10000);
+    setInterval(loadEbsState, 8000);
   </script>
 </body>
 </html>

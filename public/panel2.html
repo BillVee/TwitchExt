@@ -130,16 +130,115 @@
       logBox.innerHTML = '<div>[ready] Log cleared</div>';
     });
 
-    async function checkEbs() {
+    function resolveEbsUrl(endpoint = '/ping') {
       try {
-        const res = await window.Twitch.ext.ebs.ping();
+        const urlParams = new URLSearchParams(window.location.search);
+        const customEbs = urlParams.get('ebs') || urlParams.get('ebsUrl') || urlParams.get('backend');
+        let base = customEbs ? customEbs.replace(/\/$/, '') : '';
+        if (!base && urlParams.get('ebsPort')) {
+          base = `${window.location.protocol}//${window.location.hostname}:${urlParams.get('ebsPort')}/api/ebs`;
+        }
+        if (!base && typeof window.TWITCH_EBS_URL === 'string') {
+          base = window.TWITCH_EBS_URL.replace(/\/$/, '');
+        }
+        if (!base && typeof localStorage !== 'undefined' && localStorage.getItem('TWITCH_EBS_URL')) {
+          base = localStorage.getItem('TWITCH_EBS_URL').replace(/\/$/, '');
+        }
+        if (!base) {
+          base = '/api/ebs';
+        }
+        const cleanEndpoint = endpoint.startsWith('/api/ebs') ? endpoint.replace('/api/ebs', '') : endpoint;
+        const subPath = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
+        return new URL(`${base}${subPath}`, window.location.href).href;
+      } catch (e) {
+        return `/api/ebs${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+      }
+    }
+
+    const getEbs = () => ({
+      ping: async () => {
+        const targetUrl = resolveEbsUrl('/ping');
+        const start = performance.now();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        try {
+          const res = await fetch(targetUrl, {
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          const latency = Math.round(performance.now() - start);
+          if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+          const data = await res.json();
+          return { ...data, latencyMs: latency, targetUrl };
+        } catch (err) {
+          clearTimeout(timeoutId);
+          err.targetUrl = targetUrl;
+          throw err;
+        }
+      },
+      getState: async () => {
+        const targetUrl = resolveEbsUrl('/state');
+        const res = await fetch(targetUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+      sendAction: async (action, payload) => {
+        const targetUrl = resolveEbsUrl('/action');
+        const res = await fetch(targetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, payload, sender: '/panel2.html' }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+      fetchConfig: async () => {
+        const targetUrl = resolveEbsUrl('/config');
+        const res = await fetch(targetUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+    });
+
+    async function checkEbs() {
+      const pingUrl = resolveEbsUrl('/ping');
+      let targetObj;
+      try {
+        targetObj = new URL(pingUrl, window.location.href);
+      } catch (e) {
+        targetObj = {
+          href: pingUrl,
+          hostname: window.location.hostname || 'localhost',
+          port: window.location.port || (window.location.protocol === 'https:' ? '443' : '80'),
+          protocol: window.location.protocol || 'http:',
+        };
+      }
+      const port = targetObj.port || (targetObj.protocol === 'https:' ? '443' : '80');
+
+      log(`[PING] Connecting to EBS at: ${targetObj.href} (Port: ${port})...`, 'info');
+      ebsDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+      ebsStatusText.textContent = 'Checking...';
+
+      try {
+        const ebs = getEbs();
+        const res = await ebs.ping();
         ebsDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
         ebsStatusText.textContent = `${res.latencyMs}ms`;
-        log(`EBS Ping OK (${res.latencyMs}ms)`, 'success');
-      } catch (e) {
+        log(`✓ EBS Ping OK (${res.latencyMs}ms) | URL: ${targetObj.href} | Port: ${port}`, 'success');
+      } catch (err) {
         ebsDot.className = 'w-2 h-2 rounded-full bg-rose-500';
         ebsStatusText.textContent = 'Offline';
-        log(`EBS check failed: ${e.message}`, 'error');
+
+        const errMsg = err.name === 'AbortError' ? 'Request timed out after 6s' : err.message;
+        log(`❌ EBS Error: ${err.name} - ${errMsg}`, 'error');
+        log(`   Target URL: ${targetObj.href}`, 'error');
+        log(`   Target Host: ${targetObj.hostname} | Target Port: ${port} | Protocol: ${targetObj.protocol}`, 'error');
+        log(`   Page Origin: ${window.location.origin} | Page Path: ${window.location.pathname}`, 'error');
+
+        if (err.name === 'TypeError' || errMsg.toLowerCase().includes('failed to fetch') || errMsg.toLowerCase().includes('networkerror')) {
+          log(`💡 Diagnostic Tip: If EBS is on https://${targetObj.hostname}:${port} with self-signed SSL, open "${targetObj.href}" in a new browser tab to accept the certificate, or start server with USE_SSL=false.`, 'event');
+        }
       }
     }
 
@@ -166,16 +265,17 @@
 
     async function loadLeaderboard() {
       try {
-        if (!queryHeight && window.Twitch && window.Twitch.ext && window.Twitch.ext.ebs) {
+        const ebs = getEbs();
+        if (!queryHeight) {
           try {
-            const configRes = await window.Twitch.ext.ebs.fetchConfig();
+            const configRes = await ebs.fetchConfig();
             if (configRes && (configRes.panel2Height || configRes.panelHeight)) {
               applyHeight(configRes.panel2Height || configRes.panelHeight);
             }
           } catch(err){}
         }
 
-        const state = await window.Twitch.ext.ebs.getState();
+        const state = await ebs.getState();
         if (state && state.leaderboard) {
           renderLeaderboard(state.leaderboard);
         }
@@ -209,7 +309,8 @@
     document.getElementById('btn-bits-fireworks').addEventListener('click', async () => {
       log('Simulating 100 Bits cheer via EBS...', 'event');
       try {
-        const res = await window.Twitch.ext.ebs.sendAction('BITS_CHEER', {
+        const ebs = getEbs();
+        const res = await ebs.sendAction('BITS_CHEER', {
           sku: 'bits_hype_100',
           amount: 100,
           user: 'PixelChampion'
@@ -225,12 +326,17 @@
     document.getElementById('btn-bits-boost').addEventListener('click', async () => {
       log('Sending Poll Booster to EBS...', 'event');
       try {
-        await window.Twitch.ext.ebs.sendAction('POLL_BOOST', { boostVotes: 5 });
+        const ebs = getEbs();
+        await ebs.sendAction('POLL_BOOST', { boostVotes: 5 });
         log('Boost applied! Panels and Overlay updated.', 'success');
       } catch (e) {
         log(`Boost error: ${e.message}`, 'error');
       }
     });
+
+    // Run connection checks immediately
+    checkEbs();
+    loadLeaderboard();
 
     if (window.Twitch && window.Twitch.ext) {
       window.Twitch.ext.onAuthorized(() => {
@@ -238,7 +344,7 @@
         loadLeaderboard();
       });
 
-      window.Twitch.ext.listen('broadcast', (target, contentType, message) => {
+      window.Twitch.ext.listen?.('broadcast', (target, contentType, message) => {
         try {
           const data = typeof message === 'string' ? JSON.parse(message) : message;
           if (data.type === 'LEADERBOARD_UPDATE' && data.leaderboard) {
@@ -249,7 +355,7 @@
       });
     }
 
-    setInterval(loadLeaderboard, 12000);
+    setInterval(loadLeaderboard, 8000);
   </script>
 </body>
 </html>

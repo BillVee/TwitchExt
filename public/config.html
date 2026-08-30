@@ -202,11 +202,46 @@
       }
     });
 
+    const getEbs = () => window.Twitch?.ext?.ebs || window.EBS || {
+      ping: async () => {
+        const start = performance.now();
+        const res = await fetch('/api/ebs/ping');
+        const latency = Math.round(performance.now() - start);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return { ...data, latencyMs: latency };
+      },
+      getState: async () => {
+        const res = await fetch('/api/ebs/state');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      },
+      saveConfig: async (configData) => {
+        const res = await fetch('/api/ebs/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(configData),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      },
+      sendAction: async (action, payload) => {
+        const res = await fetch('/api/ebs/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, payload, sender: '/config.html' }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      },
+    };
+
     // Test EBS Connectivity
     async function testEbsPing() {
       try {
+        const ebs = getEbs();
         ebsIndicator.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
-        const res = await window.Twitch.ext.ebs.ping();
+        const res = await ebs.ping();
         ebsIndicator.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
         ebsLatencyBadge.textContent = `${res.latencyMs}ms (Online)`;
         log(`EBS Health Check passed (${res.latencyMs}ms)`, 'success');
@@ -232,20 +267,25 @@
       log('Saving configuration to EBS & Twitch Extension service...', 'info');
 
       try {
+        const ebs = getEbs();
         // 1. Save to EBS
-        const res = await window.Twitch.ext.ebs.saveConfig(configData);
+        await ebs.saveConfig(configData);
         log('Saved to EBS backend successfully!', 'success');
 
-        // 2. Set on Twitch Extension Configuration Service
-        window.Twitch.ext.configuration.set('broadcaster', '1.0.0', JSON.stringify(configData));
-        log('Updated Twitch Configuration Service (broadcaster segment)', 'success');
+        // 2. Set on Twitch Extension Configuration Service if available
+        if (window.Twitch?.ext?.configuration?.set) {
+          window.Twitch.ext.configuration.set('broadcaster', '1.0.0', JSON.stringify(configData));
+          log('Updated Twitch Configuration Service (broadcaster segment)', 'success');
+        }
 
         // 3. Broadcast to all open views via PubSub
-        window.Twitch.ext.send('broadcast', 'application/json', {
-          type: 'CONFIG_UPDATE',
-          config: configData,
-        });
-        log('Broadcasted CONFIG_UPDATE to Overlay and Panels', 'event');
+        if (window.Twitch?.ext?.send) {
+          window.Twitch.ext.send('broadcast', 'application/json', {
+            type: 'CONFIG_UPDATE',
+            config: configData,
+          });
+          log('Broadcasted CONFIG_UPDATE to Overlay and Panels', 'event');
+        }
       } catch (err) {
         log(`Save failed: ${err.message}`, 'error');
       }
@@ -256,7 +296,8 @@
       const msg = inputAlertMsg.value.trim() || 'Stream alert broadcast!';
       log(`Broadcasting alert message to all extension views...`, 'event');
       try {
-        await window.Twitch.ext.ebs.sendAction('BROADCASTER_ALERT', {
+        const ebs = getEbs();
+        await ebs.sendAction('BROADCASTER_ALERT', {
           title: '📢 Broadcaster Announcement',
           message: msg,
         });
@@ -270,7 +311,8 @@
     document.getElementById('btn-reset-votes').addEventListener('click', async () => {
       log('Resetting poll votes in EBS...', 'info');
       try {
-        await window.Twitch.ext.ebs.sendAction('RESET_POLL_VOTES', {
+        const ebs = getEbs();
+        await ebs.sendAction('RESET_POLL_VOTES', {
           question: inputPollQuestion.value,
           options: currentOptions,
         });
@@ -282,7 +324,8 @@
 
     async function loadInitialData() {
       try {
-        const state = await window.Twitch.ext.ebs.getState();
+        const ebs = getEbs();
+        const state = await ebs.getState();
         if (state && state.config) {
           inputTitle.value = state.config.title || 'Community Interactive Hub';
           inputWelcome.value = state.config.welcomeMessage || '';
@@ -301,13 +344,15 @@
       }
     }
 
+    // Run immediately on page load
+    testEbsPing();
+    loadInitialData();
+
     if (window.Twitch && window.Twitch.ext) {
       window.Twitch.ext.onAuthorized(() => {
         testEbsPing();
         loadInitialData();
       });
-    } else {
-      renderOptionsInputs();
     }
   </script>
 </body>

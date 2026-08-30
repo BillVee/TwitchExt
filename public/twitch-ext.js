@@ -1,7 +1,7 @@
 /**
- * Twitch Extension Helper (Mock / Bridge)
- * Simulates Twitch's official `https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js`
- * Automatically detects whether it's running inside the Dev Rig or against a live EBS.
+ * Twitch Extension Helper (Mock / Bridge & EBS Client)
+ * Compatible with Twitch's official `https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js`
+ * Automatically provides EBS communication helpers and dev rig bridging.
  */
 (function () {
   'use strict';
@@ -22,7 +22,7 @@
     clientId: 'mock-twitch-client-id-xyz',
     token: 'mock.jwt.token.twitch_extension_payload',
     userId: '98765432',
-    role: 'viewer',
+    role: 'broadcaster',
     helixToken: 'mock_helix_token',
   };
 
@@ -55,13 +55,97 @@
     global: null,
   };
 
-  // Determine EBS URL based on current host
+  // Determine EBS URL based on current host and query parameters
   const getEbsBaseUrl = () => {
-    // If running in browser or iframe, default to relative /api/ebs
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const custom = params.get('ebs') || params.get('ebsUrl') || params.get('backend');
+      if (custom) return custom.replace(/\/$/, '');
+      const port = params.get('ebsPort') || params.get('port');
+      if (port) {
+        return `${window.location.protocol}//${window.location.hostname}:${port}/api/ebs`;
+      }
+      if (typeof window.TWITCH_EBS_URL === 'string') {
+        return window.TWITCH_EBS_URL.replace(/\/$/, '');
+      }
+      if (typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem('TWITCH_EBS_URL');
+        if (stored) return stored.replace(/\/$/, '');
+      }
+    } catch (e) {}
     return '/api/ebs';
   };
 
-  const TwitchExt = {
+  // EBS API Client
+  const ebsClient = {
+    getBaseUrl: getEbsBaseUrl,
+    
+    ping: async function () {
+      const start = performance.now();
+      const res = await fetch(`${getEbsBaseUrl()}/ping`);
+      const latency = Math.round(performance.now() - start);
+      if (!res.ok) {
+        throw new Error(`EBS Ping failed: HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      return { ...data, latencyMs: latency, uptime: data.uptime || data.uptimeSeconds || 0 };
+    },
+
+    getConfig: async function () {
+      const res = await fetch(`${getEbsBaseUrl()}/config`, {
+        headers: {
+          'Authorization': `Bearer ${currentAuth.token}`,
+          'Client-Id': currentAuth.clientId,
+        },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    },
+
+    fetchConfig: async function () {
+      return this.getConfig();
+    },
+
+    saveConfig: async function (configData) {
+      const res = await fetch(`${getEbsBaseUrl()}/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentAuth.token}`,
+          'Client-Id': currentAuth.clientId,
+        },
+        body: JSON.stringify(configData),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    },
+
+    getState: async function () {
+      const res = await fetch(`${getEbsBaseUrl()}/state`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    },
+
+    sendAction: async function (actionType, payload = {}) {
+      const res = await fetch(`${getEbsBaseUrl()}/action`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentAuth.token}`,
+          'Client-Id': currentAuth.clientId,
+        },
+        body: JSON.stringify({
+          action: actionType,
+          payload,
+          sender: window.location.pathname,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    },
+  };
+
+  const TwitchExtMock = {
     version: '1.0.0-mock-rig',
     environment: 'development',
 
@@ -69,16 +153,18 @@
     onAuthorized: function (callback) {
       if (typeof callback === 'function') {
         listeners.authorized.push(callback);
-        // Invoke immediately with current mock auth
-        setTimeout(() => callback(currentAuth), 10);
+        setTimeout(() => {
+          try { callback(currentAuth); } catch (e) { console.error(e); }
+        }, 10);
       }
     },
 
     onContext: function (callback) {
       if (typeof callback === 'function') {
         listeners.context.push(callback);
-        // Invoke immediately with current context
-        setTimeout(() => callback(currentContext, Object.keys(currentContext)), 10);
+        setTimeout(() => {
+          try { callback(currentContext, Object.keys(currentContext)); } catch (e) { console.error(e); }
+        }, 10);
       }
     },
 
@@ -108,21 +194,23 @@
       onChanged: function (callback) {
         if (typeof callback === 'function') {
           listeners.configChanged.push(callback);
-          setTimeout(() => callback(), 10);
+          setTimeout(() => {
+            try { callback(); } catch (e) { console.error(e); }
+          }, 10);
         }
       },
       set: function (segment, version, content) {
         if (['broadcaster', 'developer', 'global'].includes(segment)) {
           currentConfig[segment] = { version, content };
-          TwitchExt.configuration[segment] = currentConfig[segment];
-          // Notify parent rig if inside iframe
+          if (window.Twitch && window.Twitch.ext && window.Twitch.ext.configuration) {
+            window.Twitch.ext.configuration[segment] = currentConfig[segment];
+          }
           window.parent.postMessage({
             type: 'TWITCH_CONFIG_SET',
             segment,
             version,
             content,
           }, '*');
-          // Dispatch local listeners
           listeners.configChanged.forEach(fn => {
             try { fn(); } catch (e) { console.error(e); }
           });
@@ -146,10 +234,8 @@
     },
 
     send: function (target, contentType, message) {
-      // Send message to EBS and notify other views
       const payload = typeof message === 'string' ? message : JSON.stringify(message);
       
-      // Post to parent window to broadcast to peer iframes
       window.parent.postMessage({
         type: 'TWITCH_PUBSUB_SEND',
         target,
@@ -157,7 +243,6 @@
         message: payload,
       }, '*');
 
-      // Also call EBS PubSub endpoint
       fetch(`${getEbsBaseUrl()}/pubsub/broadcast`, {
         method: 'POST',
         headers: {
@@ -176,16 +261,14 @@
       });
     },
 
-    // --- Actions & Helpers ---
     actions: {
       requestIdShare: function () {
-        console.log('[TwitchExt Mock] actions.requestIdShare invoked');
         window.parent.postMessage({ type: 'TWITCH_ACTION', action: 'requestIdShare' }, '*');
       },
       minimize: function () {
         console.log('[TwitchExt Mock] actions.minimize invoked');
       },
-      onFollow: function (callback) {
+      onFollow: function () {
         console.log('[TwitchExt Mock] actions.onFollow registered');
       },
     },
@@ -199,77 +282,16 @@
         ];
       },
       useBits: function (sku) {
-        console.log('[TwitchExt Mock] bits.useBits called with SKU:', sku);
         window.parent.postMessage({ type: 'TWITCH_USE_BITS', sku }, '*');
       },
       showBitsBalance: function () {
         console.log('[TwitchExt Mock] bits.showBitsBalance invoked');
       },
-      onTransactionComplete: function (callback) {
-        console.log('[TwitchExt Mock] bits.onTransactionComplete registered');
-      },
-      onTransactionCancelled: function (callback) {
-        console.log('[TwitchExt Mock] bits.onTransactionCancelled registered');
-      },
+      onTransactionComplete: function () {},
+      onTransactionCancelled: function () {},
     },
 
-    // --- Custom EBS Helper to easily talk with server.js / server.ts ---
-    ebs: {
-      getBaseUrl: getEbsBaseUrl,
-      
-      ping: async function () {
-        const start = performance.now();
-        const res = await fetch(`${getEbsBaseUrl()}/ping`);
-        const latency = Math.round(performance.now() - start);
-        const data = await res.json();
-        return { ...data, latencyMs: latency };
-      },
-
-      getConfig: async function () {
-        const res = await fetch(`${getEbsBaseUrl()}/config`, {
-          headers: {
-            'Authorization': `Bearer ${currentAuth.token}`,
-            'Client-Id': currentAuth.clientId,
-          },
-        });
-        return await res.json();
-      },
-
-      saveConfig: async function (configData) {
-        const res = await fetch(`${getEbsBaseUrl()}/config`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${currentAuth.token}`,
-            'Client-Id': currentAuth.clientId,
-          },
-          body: JSON.stringify(configData),
-        });
-        return await res.json();
-      },
-
-      getState: async function () {
-        const res = await fetch(`${getEbsBaseUrl()}/state`);
-        return await res.json();
-      },
-
-      sendAction: async function (actionType, payload = {}) {
-        const res = await fetch(`${getEbsBaseUrl()}/action`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${currentAuth.token}`,
-            'Client-Id': currentAuth.clientId,
-          },
-          body: JSON.stringify({
-            action: actionType,
-            payload,
-            sender: window.location.pathname,
-          }),
-        });
-        return await res.json();
-      },
-    },
+    ebs: ebsClient,
   };
 
   // Listen to messages from the parent test harness (Rig)
@@ -279,13 +301,16 @@
 
     if (type === 'RIG_UPDATE_AUTH') {
       currentAuth = { ...currentAuth, ...data };
-      listeners.authorized.forEach(fn => fn(currentAuth));
+      listeners.authorized.forEach(fn => {
+        try { fn(currentAuth); } catch (e) { console.error(e); }
+      });
     } else if (type === 'RIG_UPDATE_CONTEXT') {
       currentContext = { ...currentContext, ...data };
-      listeners.context.forEach(fn => fn(currentContext, Object.keys(data)));
+      listeners.context.forEach(fn => {
+        try { fn(currentContext, Object.keys(data)); } catch (e) { console.error(e); }
+      });
     } else if (type === 'RIG_PUBSUB_RECEIVE') {
       const { target, contentType, message } = data;
-      // Match exact target or wildcard broadcast
       ['broadcast', target, '*'].forEach(t => {
         if (listeners.pubsub.has(t)) {
           listeners.pubsub.get(t).forEach(fn => {
@@ -295,17 +320,89 @@
       });
     } else if (type === 'RIG_UPDATE_CONFIG') {
       currentConfig.broadcaster = { version: data.version || '1.0.0', content: JSON.stringify(data.content || data) };
-      TwitchExt.configuration.broadcaster = currentConfig.broadcaster;
-      listeners.configChanged.forEach(fn => fn());
+      if (window.Twitch && window.Twitch.ext && window.Twitch.ext.configuration) {
+        window.Twitch.ext.configuration.broadcaster = currentConfig.broadcaster;
+      }
+      listeners.configChanged.forEach(fn => {
+        try { fn(); } catch (e) { console.error(e); }
+      });
     }
   });
 
-  // Expose to window only if not already provided by official Twitch helper
+  // Attach to window.Twitch
   window.Twitch = window.Twitch || {};
+  
   if (!window.Twitch.ext) {
-    window.Twitch.ext = TwitchExt;
-    console.log('[TwitchExt Mock] Loaded Twitch Extension Helper Bridge.');
+    window.Twitch.ext = TwitchExtMock;
+    console.log('[TwitchExt Bridge] Initialized standalone Twitch Extension Helper Mock.');
   } else {
-    console.log('[TwitchExt] Official Twitch Extension Helper detected.');
+    // If official Twitch ext helper already initialized, augment it with EBS and Rig support
+    const officialExt = window.Twitch.ext;
+    
+    // Always provide EBS helper
+    officialExt.ebs = ebsClient;
+
+    // Wrap onAuthorized to ensure local callbacks fire in dev mode / test rig
+    const origOnAuthorized = officialExt.onAuthorized?.bind(officialExt);
+    officialExt.onAuthorized = function (callback) {
+      if (typeof callback === 'function') {
+        listeners.authorized.push(callback);
+        if (origOnAuthorized) {
+          try { origOnAuthorized(callback); } catch (e) {}
+        }
+        // Also trigger with mock auth in case outside live Twitch iframe
+        setTimeout(() => {
+          try { callback(currentAuth); } catch (e) { console.error(e); }
+        }, 10);
+      }
+    };
+
+    // Ensure configuration onChanged & broadcaster object exist
+    if (!officialExt.configuration) {
+      officialExt.configuration = TwitchExtMock.configuration;
+    } else {
+      if (!officialExt.configuration.broadcaster) {
+        officialExt.configuration.broadcaster = currentConfig.broadcaster;
+      }
+      const origOnChanged = officialExt.configuration.onChanged?.bind(officialExt.configuration);
+      officialExt.configuration.onChanged = function (callback) {
+        if (typeof callback === 'function') {
+          listeners.configChanged.push(callback);
+          if (origOnChanged) {
+            try { origOnChanged(callback); } catch (e) {}
+          }
+          setTimeout(() => {
+            try { callback(); } catch (e) { console.error(e); }
+          }, 10);
+        }
+      };
+    }
+
+    // Ensure listen & send fallback
+    const origListen = officialExt.listen?.bind(officialExt);
+    officialExt.listen = function (target, callback) {
+      if (origListen) {
+        try { origListen(target, callback); } catch (e) {}
+      }
+      TwitchExtMock.listen(target, callback);
+    };
+
+    const origSend = officialExt.send?.bind(officialExt);
+    officialExt.send = function (target, contentType, message) {
+      if (origSend) {
+        try { origSend(target, contentType, message); } catch (e) {}
+      }
+      TwitchExtMock.send(target, contentType, message);
+    };
+
+    // Ensure actions & bits exist
+    if (!officialExt.actions) officialExt.actions = TwitchExtMock.actions;
+    if (!officialExt.bits) officialExt.bits = TwitchExtMock.bits;
+
+    console.log('[TwitchExt Bridge] Augmented official Twitch Extension Helper with EBS & Dev Rig hooks.');
   }
+
+  // Also expose EBS helper directly on window for direct access if desired
+  window.EBS = ebsClient;
 })();
+

@@ -147,19 +147,101 @@
       logBox.innerHTML = '<div class="text-neutral-500">[system] Log cleared</div>';
     });
 
+    function resolveEbsUrl(endpoint = '/ping') {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const customEbs = urlParams.get('ebs') || urlParams.get('ebsUrl') || urlParams.get('backend');
+        let base = customEbs ? customEbs.replace(/\/$/, '') : '';
+        if (!base && urlParams.get('ebsPort')) {
+          base = `${window.location.protocol}//${window.location.hostname}:${urlParams.get('ebsPort')}/api/ebs`;
+        }
+        if (!base && typeof window.TWITCH_EBS_URL === 'string') {
+          base = window.TWITCH_EBS_URL.replace(/\/$/, '');
+        }
+        if (!base && typeof localStorage !== 'undefined' && localStorage.getItem('TWITCH_EBS_URL')) {
+          base = localStorage.getItem('TWITCH_EBS_URL').replace(/\/$/, '');
+        }
+        if (!base) {
+          base = '/api/ebs';
+        }
+        const cleanEndpoint = endpoint.startsWith('/api/ebs') ? endpoint.replace('/api/ebs', '') : endpoint;
+        const subPath = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
+        return new URL(`${base}${subPath}`, window.location.href).href;
+      } catch (e) {
+        return `/api/ebs${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+      }
+    }
+
+    const getEbs = () => ({
+      ping: async () => {
+        const targetUrl = resolveEbsUrl('/ping');
+        const start = performance.now();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        try {
+          const res = await fetch(targetUrl, {
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          const latency = Math.round(performance.now() - start);
+          if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+          const data = await res.json();
+          return { ...data, latencyMs: latency, targetUrl };
+        } catch (err) {
+          clearTimeout(timeoutId);
+          err.targetUrl = targetUrl;
+          throw err;
+        }
+      },
+      getState: async () => {
+        const targetUrl = resolveEbsUrl('/state');
+        const res = await fetch(targetUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+    });
+
     // Test EBS connectivity
     async function testEbsPing() {
+      const pingUrl = resolveEbsUrl('/ping');
+      let targetObj;
       try {
-        ebsDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping';
-        const res = await window.Twitch.ext.ebs.ping();
+        targetObj = new URL(pingUrl, window.location.href);
+      } catch (e) {
+        targetObj = {
+          href: pingUrl,
+          hostname: window.location.hostname || 'localhost',
+          port: window.location.port || (window.location.protocol === 'https:' ? '443' : '80'),
+          protocol: window.location.protocol || 'http:',
+        };
+      }
+      const port = targetObj.port || (targetObj.protocol === 'https:' ? '443' : '80');
+
+      log(`[PING] Connecting to EBS at: ${targetObj.href} (Port: ${port})...`, 'info');
+      ebsDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping';
+      ebsLatency.textContent = 'Checking...';
+
+      try {
+        const ebs = getEbs();
+        const res = await ebs.ping();
         ebsDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
         ebsLatency.textContent = `${res.latencyMs}ms (${res.status})`;
         lastSyncTime.textContent = new Date().toLocaleTimeString();
-        log(`EBS Ping OK: ${res.latencyMs}ms, uptime ${Math.round(res.uptime || 0)}s`, 'success');
+        log(`✓ EBS Ping OK: ${res.latencyMs}ms | URL: ${targetObj.href} | Port: ${port}`, 'success');
       } catch (err) {
         ebsDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
         ebsLatency.textContent = 'Offline';
-        log(`EBS Ping Failed: ${err.message}`, 'error');
+
+        const errMsg = err.name === 'AbortError' ? 'Request timed out after 6s' : err.message;
+        log(`❌ EBS Error: ${err.name} - ${errMsg}`, 'error');
+        log(`   Target URL: ${targetObj.href}`, 'error');
+        log(`   Target Host: ${targetObj.hostname} | Target Port: ${port} | Protocol: ${targetObj.protocol}`, 'error');
+        log(`   Page Origin: ${window.location.origin} | Page Path: ${window.location.pathname}`, 'error');
+
+        if (err.name === 'TypeError' || errMsg.toLowerCase().includes('failed to fetch') || errMsg.toLowerCase().includes('networkerror')) {
+          log(`💡 Diagnostic Tip: If EBS is on https://${targetObj.hostname}:${port} with self-signed SSL, open "${targetObj.href}" in a new browser tab to accept the certificate, or start server with USE_SSL=false.`, 'event');
+        }
       }
     }
 
@@ -168,7 +250,8 @@
     // Fetch and render state from EBS
     async function fetchEbsState() {
       try {
-        const state = await window.Twitch.ext.ebs.getState();
+        const ebs = getEbs();
+        const state = await ebs.getState();
         if (state && state.config) {
           announcementTitle.textContent = state.config.title || 'Stream Overlay';
           announcementBody.textContent = state.config.welcomeMessage || 'Enjoy the stream!';
@@ -246,6 +329,10 @@
       }, 4000);
     }
 
+    // Run initial ping and state fetch immediately
+    testEbsPing();
+    fetchEbsState();
+
     // Initialize Twitch Extension bindings
     if (window.Twitch && window.Twitch.ext) {
       window.Twitch.ext.onAuthorized((auth) => {
@@ -254,11 +341,11 @@
         fetchEbsState();
       });
 
-      window.Twitch.ext.onContext((context) => {
+      window.Twitch.ext.onContext?.((context) => {
         log(`Twitch Context updated (Theme: ${context.theme}, Res: ${context.displayResolution})`, 'info');
       });
 
-      window.Twitch.ext.configuration.onChanged(() => {
+      window.Twitch.ext.configuration?.onChanged?.(() => {
         const config = window.Twitch.ext.configuration.broadcaster;
         if (config && config.content) {
           try {
@@ -274,7 +361,7 @@
       });
 
       // Listen to broadcast events
-      window.Twitch.ext.listen('broadcast', (target, contentType, message) => {
+      window.Twitch.ext.listen?.('broadcast', (target, contentType, message) => {
         try {
           const data = typeof message === 'string' ? JSON.parse(message) : message;
           log(`PubSub Broadcast: ${data.type || 'message'}`, 'event');
