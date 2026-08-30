@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+Server/ssl/server.cert
+Server/ssl/server.key
+package-lock.json
