@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitch Video Component View</title>
+  <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+  <script src="/twitch-ext.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 10px rgba(145, 70, 255, 0.4); }
+      50% { box-shadow: 0 0 20px rgba(145, 70, 255, 0.7); }
+    }
+    .animate-glow { animation: pulseGlow 2.5s infinite; }
+    .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: #18181B; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 2px; }
+  </style>
+</head>
+<body class="bg-transparent text-white font-sans select-none overflow-hidden h-screen w-screen p-2 flex flex-col justify-end items-end">
+  
+  <!-- Collapsed State Tab (shown when component is minimized) -->
+  <div id="component-collapsed-tab" class="hidden cursor-pointer bg-[#18181B] hover:bg-[#1F1F23] border border-[#9146FF]/60 hover:border-[#9146FF] text-white p-2 rounded-lg shadow-2xl transition-all flex items-center gap-2 animate-glow">
+    <div class="w-6 h-6 bg-[#9146FF] rounded flex items-center justify-center font-bold text-white text-xs shadow-sm">
+      T
+    </div>
+    <div class="flex flex-col">
+      <span class="text-xs font-bold text-[#EFEFF1]">Stream Companion</span>
+      <span class="text-[10px] text-[#ADADB8]">Click to expand</span>
+    </div>
+    <svg class="w-4 h-4 text-[#9146FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+    </svg>
+  </div>
+
+  <!-- Expanded Component Window (Twitch Component Standard) -->
+  <div id="component-main-window" class="w-full max-w-[340px] bg-[#18181B]/95 backdrop-blur-md border border-[#2D2D30] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[96vh] transition-all">
+    
+    <!-- Twitch Component Header Bar -->
+    <div class="flex items-center justify-between px-3 py-2 bg-[#1F1F23]/90 border-b border-[#2D2D30] text-xs">
+      <div class="flex items-center gap-2">
+        <div class="w-5 h-5 bg-[#9146FF] rounded flex items-center justify-center font-bold text-white text-[11px] shadow-sm">
+          T
+        </div>
+        <div class="flex flex-col">
+          <span id="component-title" class="font-bold text-[#EFEFF1] text-xs leading-none">
+            Stream Companion
+          </span>
+          <span class="text-[9px] text-[#ADADB8] font-mono leading-none mt-0.5">Video Component Extension</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1 bg-[#18181B] px-1.5 py-0.5 rounded border border-[#2D2D30]">
+          <span id="ebs-status-dot" class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+          <span id="ebs-status-text" class="text-[10px] font-mono text-[#ADADB8]">Checking...</span>
+        </div>
+
+        <button id="btn-minimize" class="p-1 text-[#ADADB8] hover:text-[#EFEFF1] rounded hover:bg-[#2D2D30] transition" title="Minimize Component">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex items-center border-b border-[#2D2D30] bg-[#141417] text-[11px] font-medium">
+      <button id="tab-poll-btn" class="flex-1 py-1.5 px-2 text-center text-[#9146FF] border-b-2 border-[#9146FF] font-semibold transition">
+        Live Poll
+      </button>
+      <button id="tab-bits-btn" class="flex-1 py-1.5 px-2 text-center text-[#ADADB8] hover:text-[#EFEFF1] transition">
+        Cheer & Bits
+      </button>
+      <button id="tab-log-btn" class="flex-1 py-1.5 px-2 text-center text-[#ADADB8] hover:text-[#EFEFF1] transition">
+        EBS Log
+      </button>
+    </div>
+
+    <!-- Tab 1: Live Interactive Poll -->
+    <div id="tab-poll" class="p-3 space-y-2.5 overflow-y-auto max-h-[300px] scrollbar-thin">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-bold text-[#9146FF] uppercase tracking-wider flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+          Interactive Vote
+        </span>
+        <span id="poll-total-votes" class="text-[10px] font-mono text-[#ADADB8]">0 votes</span>
+      </div>
+
+      <div id="poll-question" class="text-xs font-semibold text-[#EFEFF1]">
+        Which game should we play next?
+      </div>
+
+      <div id="poll-options-container" class="space-y-1.5">
+        <div class="text-xs text-[#ADADB8]">Loading poll state...</div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Cheer & Bits / Hype Actions -->
+    <div id="tab-bits" class="hidden p-3 space-y-2.5 overflow-y-auto max-h-[300px] scrollbar-thin">
+      <div class="text-[11px] text-[#ADADB8]">
+        Simulate Bits rewards and live stream cheering through the EBS backend:
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btn-cheer-100" class="p-2 bg-[#1F1F23] hover:bg-[#26262C] border border-[#2D2D30] hover:border-[#9146FF] rounded-lg transition text-left group">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+            <span>💎 100 Bits</span>
+          </div>
+          <div class="text-[10px] text-[#ADADB8] mt-0.5">Stream Fireworks</div>
+        </button>
+
+        <button id="btn-cheer-500" class="p-2 bg-[#1F1F23] hover:bg-[#26262C] border border-[#2D2D30] hover:border-[#9146FF] rounded-lg transition text-left group">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-purple-400">
+            <span>🎉 500 Bits</span>
+          </div>
+          <div class="text-[10px] text-[#ADADB8] mt-0.5">Mega Hype Alert</div>
+        </button>
+      </div>
+
+      <button id="btn-trigger-hype" class="w-full py-1.5 px-3 bg-[#9146FF] hover:bg-[#772ce8] text-white rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-md">
+        <span>⚡ Trigger Broadcaster Alert</span>
+      </button>
+    </div>
+
+    <!-- Tab 3: EBS Log & Connection Diagnostics -->
+    <div id="tab-log" class="hidden p-3 space-y-2 overflow-y-auto max-h-[300px] scrollbar-thin">
+      <div class="flex items-center justify-between text-[11px]">
+        <span class="font-mono text-[#ADADB8]">EBS Activity Log</span>
+        <button id="btn-clear-log" class="text-[10px] text-[#ADADB8] hover:text-[#EFEFF1]">Clear</button>
+      </div>
+
+      <div id="log-box" class="h-32 bg-[#0E0E10] border border-[#2D2D30] rounded p-2 overflow-y-auto text-[10px] font-mono space-y-1 text-[#ADADB8] scrollbar-thin">
+        <div>[ready] Component initialized</div>
+      </div>
+
+      <button id="btn-ping" class="w-full py-1.5 px-2 bg-[#1F1F23] hover:bg-[#2D2D30] border border-[#2D2D30] text-xs font-medium text-[#EFEFF1] rounded transition flex items-center justify-center gap-1.5">
+        <svg class="w-3 h-3 text-[#9146FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Ping EBS Server
+      </button>
+    </div>
+
+    <!-- Component Footer with Last Sync -->
+    <div class="px-3 py-1.5 bg-[#141417] border-t border-[#2D2D30] flex items-center justify-between text-[9px] text-[#ADADB8] font-mono">
+      <span>Twitch Extension Component</span>
+      <span id="last-sync-time">Sync: --:--:--</span>
+    </div>
+
+  </div>
+
+  <script>
+    const logBox = document.getElementById('log-box');
+    const ebsDot = document.getElementById('ebs-status-dot');
+    const ebsStatusText = document.getElementById('ebs-status-text');
+    const lastSyncTime = document.getElementById('last-sync-time');
+    const componentTitle = document.getElementById('component-title');
+    const pollQuestion = document.getElementById('poll-question');
+    const pollTotalVotes = document.getElementById('poll-total-votes');
+    const pollOptionsContainer = document.getElementById('poll-options-container');
+
+    const mainWindow = document.getElementById('component-main-window');
+    const collapsedTab = document.getElementById('component-collapsed-tab');
+    const btnMinimize = document.getElementById('btn-minimize');
+
+    function log(msg, type = 'info') {
+      const el = document.createElement('div');
+      const time = new Date().toLocaleTimeString().split(' ')[0];
+      el.className = type === 'error' ? 'text-rose-400' : type === 'success' ? 'text-emerald-400' : type === 'event' ? 'text-purple-300' : 'text-neutral-300';
+      el.textContent = `[${time}] ${msg}`;
+      logBox.appendChild(el);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    document.getElementById('btn-clear-log').addEventListener('click', () => {
+      logBox.innerHTML = '<div>[ready] Log cleared</div>';
+    });
+
+    // Minimize & Expand Component handlers
+    btnMinimize.addEventListener('click', () => {
+      mainWindow.classList.add('hidden');
+      collapsedTab.classList.remove('hidden');
+      if (window.Twitch?.ext?.actions?.minimize) {
+        try { window.Twitch.ext.actions.minimize(); } catch(e){}
+      }
+    });
+
+    collapsedTab.addEventListener('click', () => {
+      collapsedTab.classList.add('hidden');
+      mainWindow.classList.remove('hidden');
+    });
+
+    // Tab Switching
+    const tabs = {
+      poll: { btn: document.getElementById('tab-poll-btn'), content: document.getElementById('tab-poll') },
+      bits: { btn: document.getElementById('tab-bits-btn'), content: document.getElementById('tab-bits') },
+      log: { btn: document.getElementById('tab-log-btn'), content: document.getElementById('tab-log') },
+    };
+
+    function switchTab(activeKey) {
+      Object.keys(tabs).forEach(key => {
+        const { btn, content } = tabs[key];
+        if (key === activeKey) {
+          btn.className = 'flex-1 py-1.5 px-2 text-center text-[#9146FF] border-b-2 border-[#9146FF] font-semibold transition';
+          content.classList.remove('hidden');
+        } else {
+          btn.className = 'flex-1 py-1.5 px-2 text-center text-[#ADADB8] hover:text-[#EFEFF1] transition';
+          content.classList.add('hidden');
+        }
+      });
+    }
+
+    tabs.poll.btn.addEventListener('click', () => switchTab('poll'));
+    tabs.bits.btn.addEventListener('click', () => switchTab('bits'));
+    tabs.log.btn.addEventListener('click', () => switchTab('log'));
+
+    // EBS URL Resolution & Communication
+    function resolveEbsUrl(endpoint = '/ping') {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const customEbs = urlParams.get('ebs') || urlParams.get('ebsUrl') || urlParams.get('backend');
+        let base = customEbs ? customEbs.replace(/\/$/, '') : '';
+        if (!base && urlParams.get('ebsPort')) {
+          base = `${window.location.protocol}//${window.location.hostname}:${urlParams.get('ebsPort')}/api/ebs`;
+        }
+        if (!base && typeof window.TWITCH_EBS_URL === 'string') {
+          base = window.TWITCH_EBS_URL.replace(/\/$/, '');
+        }
+        if (!base && typeof localStorage !== 'undefined' && localStorage.getItem('TWITCH_EBS_URL')) {
+          base = localStorage.getItem('TWITCH_EBS_URL').replace(/\/$/, '');
+        }
+        if (!base) {
+          base = '/api/ebs';
+        }
+        const cleanEndpoint = endpoint.startsWith('/api/ebs') ? endpoint.replace('/api/ebs', '') : endpoint;
+        const subPath = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
+        return new URL(`${base}${subPath}`, window.location.href).href;
+      } catch (e) {
+        return `/api/ebs${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+      }
+    }
+
+    const getEbs = () => ({
+      ping: async () => {
+        const targetUrl = resolveEbsUrl('/ping');
+        const start = performance.now();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        try {
+          const res = await fetch(targetUrl, {
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          const latency = Math.round(performance.now() - start);
+          if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+          const data = await res.json();
+          return { ...data, latencyMs: latency, targetUrl };
+        } catch (err) {
+          clearTimeout(timeoutId);
+          err.targetUrl = targetUrl;
+          throw err;
+        }
+      },
+      getState: async () => {
+        const targetUrl = resolveEbsUrl('/state');
+        const res = await fetch(targetUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+      sendAction: async (action, payload) => {
+        const targetUrl = resolveEbsUrl('/action');
+        const res = await fetch(targetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, payload, sender: '/video_component.html' }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+      fetchConfig: async () => {
+        const targetUrl = resolveEbsUrl('/config');
+        const res = await fetch(targetUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status} from ${targetUrl}`);
+        return await res.json();
+      },
+    });
+
+    async function checkEbs() {
+      const pingUrl = resolveEbsUrl('/ping');
+      let targetObj;
+      try {
+        targetObj = new URL(pingUrl, window.location.href);
+      } catch (e) {
+        targetObj = {
+          href: pingUrl,
+          hostname: window.location.hostname || 'localhost',
+          port: window.location.port || (window.location.protocol === 'https:' ? '443' : '80'),
+          protocol: window.location.protocol || 'http:',
+        };
+      }
+      const port = targetObj.port || (targetObj.protocol === 'https:' ? '443' : '80');
+
+      log(`[PING] Connecting to EBS at: ${targetObj.href} (Port: ${port})...`, 'info');
+      ebsDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse';
+      ebsStatusText.textContent = 'Checking...';
+
+      try {
+        const ebs = getEbs();
+        const res = await ebs.ping();
+        ebsDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+        ebsStatusText.textContent = `${res.latencyMs}ms`;
+        lastSyncTime.textContent = `Sync: ${new Date().toLocaleTimeString()}`;
+        log(`✓ EBS Ping OK (${res.latencyMs}ms) | URL: ${targetObj.href} | Port: ${port}`, 'success');
+      } catch (err) {
+        ebsDot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+        ebsStatusText.textContent = 'Offline';
+
+        const errMsg = err.name === 'AbortError' ? 'Request timed out after 6s' : err.message;
+        log(`❌ EBS Error: ${err.name} - ${errMsg}`, 'error');
+        log(`   Target URL: ${targetObj.href}`, 'error');
+        log(`   Target Host: ${targetObj.hostname} | Target Port: ${port} | Protocol: ${targetObj.protocol}`, 'error');
+        log(`   Page Origin: ${window.location.origin} | Page Path: ${window.location.pathname}`, 'error');
+
+        if (err.name === 'TypeError' || errMsg.toLowerCase().includes('failed to fetch') || errMsg.toLowerCase().includes('networkerror')) {
+          log(`💡 Diagnostic Tip: If EBS is on https://${targetObj.hostname}:${port} with self-signed SSL, open "${targetObj.href}" in a new browser tab to accept the certificate, or start server with USE_SSL=false.`, 'event');
+        }
+      }
+    }
+
+    document.getElementById('btn-ping').addEventListener('click', checkEbs);
+
+    async function loadState() {
+      try {
+        const ebs = getEbs();
+        const state = await ebs.getState();
+        if (state && state.config) {
+          if (state.config.title) componentTitle.textContent = state.config.title;
+        }
+        if (state && state.poll) {
+          renderPoll(state.poll);
+        }
+        lastSyncTime.textContent = `Sync: ${new Date().toLocaleTimeString()}`;
+      } catch (e) {
+        console.warn('Component state load error:', e);
+      }
+    }
+
+    function renderPoll(poll) {
+      if (!poll || !poll.options) return;
+      pollQuestion.textContent = poll.question || 'Live Poll';
+      pollTotalVotes.textContent = `${poll.totalVotes || 0} votes`;
+      
+      const total = poll.totalVotes || 1;
+      pollOptionsContainer.innerHTML = poll.options.map((opt, idx) => {
+        const pct = Math.round(((opt.votes || 0) / (total === 0 ? 1 : total)) * 100);
+        return `
+          <button data-index="${idx}" class="btn-vote-option w-full p-2 bg-[#1F1F23] hover:bg-[#26262C] border border-[#2D2D30] hover:border-[#9146FF] rounded-lg transition text-left group flex flex-col gap-1">
+            <div class="flex justify-between items-center text-xs">
+              <span class="font-medium text-[#EFEFF1] group-hover:text-white">${opt.text}</span>
+              <span class="text-[10px] text-[#ADADB8] font-mono font-semibold">${opt.votes || 0} (${pct}%)</span>
+            </div>
+            <div class="h-1.5 w-full bg-[#141417] rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-purple-600 to-indigo-500 rounded-full transition-all duration-300" style="width: ${pct}%"></div>
+            </div>
+          </button>
+        `;
+      }).join('');
+
+      document.querySelectorAll('.btn-vote-option').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const idx = parseInt(btn.getAttribute('data-index') || '0', 10);
+          log(`Voting for option #${idx + 1}...`, 'event');
+          try {
+            const ebs = getEbs();
+            const res = await ebs.sendAction('POLL_VOTE', { optionIndex: idx });
+            if (res && res.poll) {
+              renderPoll(res.poll);
+              log(`Vote counted! Total votes: ${res.poll.totalVotes}`, 'success');
+            }
+          } catch (err) {
+            log(`Vote failed: ${err.message}`, 'error');
+          }
+        });
+      });
+    }
+
+    // Cheer Actions
+    document.getElementById('btn-cheer-100').addEventListener('click', async () => {
+      log('Cheering 100 Bits via Component...', 'event');
+      try {
+        const ebs = getEbs();
+        await ebs.sendAction('BITS_CHEER', { sku: 'bits_hype_100', amount: 100, user: 'ComponentViewer' });
+        log('100 Bits cheer broadcasted! Overlay fireworks ignited.', 'success');
+      } catch (err) {
+        log(`Cheer error: ${err.message}`, 'error');
+      }
+    });
+
+    document.getElementById('btn-cheer-500').addEventListener('click', async () => {
+      log('Cheering 500 Bits (Mega Hype)...', 'event');
+      try {
+        const ebs = getEbs();
+        await ebs.sendAction('BITS_CHEER', { sku: 'bits_mega_500', amount: 500, user: 'ComponentViewer' });
+        log('Mega Hype 500 Bits cheer sent to EBS!', 'success');
+      } catch (err) {
+        log(`Cheer error: ${err.message}`, 'error');
+      }
+    });
+
+    document.getElementById('btn-trigger-hype').addEventListener('click', async () => {
+      log('Broadcasting alert from Component...', 'event');
+      try {
+        const ebs = getEbs();
+        await ebs.sendAction('BROADCASTER_ALERT', {
+          title: '⚡ Component Alert',
+          message: 'Viewer activated Component Companion on stream!',
+        });
+        log('Alert delivered to stream overlay!', 'success');
+      } catch (err) {
+        log(`Alert error: ${err.message}`, 'error');
+      }
+    });
+
+    // Run initial checks immediately
+    checkEbs();
+    loadState();
+
+    if (window.Twitch && window.Twitch.ext) {
+      window.Twitch.ext.onAuthorized((auth) => {
+        log(`Twitch Auth authorized on Component for channel ${auth.channelId}`, 'info');
+        checkEbs();
+        loadState();
+      });
+
+      window.Twitch.ext.listen?.('broadcast', (target, contentType, message) => {
+        try {
+          const data = typeof message === 'string' ? JSON.parse(message) : message;
+          if (data.type === 'POLL_UPDATE' && data.poll) {
+            renderPoll(data.poll);
+          } else if (data.type === 'CONFIG_UPDATE' && data.config?.title) {
+            componentTitle.textContent = data.config.title;
+          }
+        } catch(e) {}
+      });
+    }
+
+    setInterval(loadState, 8000);
+  </script>
+</body>
+</html>

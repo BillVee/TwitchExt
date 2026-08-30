@@ -2,7 +2,7 @@
  * Twitch Extension Developer Rig & EBS Test Harness
  * 
  * Layout Structure:
- * - 1st iframe: overlay.html (Top of page, responsive aspect ratio video overlay)
+ * - 1st iframe: video_overlay.html (Default) or video_component.html (Switchable Video Overlay / Component View)
  * - 2nd iframe: panel.html (Left side under the overlay)
  * - 3rd iframe: panel2.html (Right side of the 2nd iframe)
  * - 4th iframe: config.html (Bottom of the other 3, taking full width of page)
@@ -14,14 +14,26 @@ import { OverlayFrame } from './components/OverlayFrame';
 import { PanelFrames } from './components/PanelFrames';
 import { ConfigFrame } from './components/ConfigFrame';
 import { ServerGuideModal } from './components/ServerGuideModal';
-import { AspectRatioPreset, RigAuth, RigContext } from './types';
-import { Radio, Activity, CheckCircle2, Shield, Sparkles } from 'lucide-react';
+import { AspectRatioPreset, RigAuth, RigContext, VideoViewMode } from './types';
+import { Radio, Activity, CheckCircle2, Shield, Sparkles, LayoutTemplate, Monitor } from 'lucide-react';
 
 export default function App() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatioPreset>('16:9 (1080p)');
   const [streamBg, setStreamBg] = useState(true);
   const [refreshKey, setRefreshKey] = useState(Date.now());
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+
+  // Default to video_overlay.html, with support for URL query parameter (?view=component or ?view=overlay)
+  const [videoMode, setVideoMode] = useState<VideoViewMode>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get('view') || params.get('mode') || params.get('extension');
+      if (viewParam === 'component' || viewParam === 'video_component' || viewParam === 'video_component.html') {
+        return 'component';
+      }
+    } catch (e) {}
+    return 'overlay';
+  });
 
   // EBS Server Communication Status
   const [ebsOnline, setEbsOnline] = useState<boolean | null>(null);
@@ -170,10 +182,16 @@ export default function App() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#ADADB8]">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-green-500" />
-              <span>Overlay (Top)</span>
-            </div>
+            <button 
+              onClick={() => setVideoMode(videoMode === 'overlay' ? 'component' : 'overlay')}
+              className="flex items-center gap-1.5 hover:text-[#EFEFF1] transition"
+              title="Click to toggle Video Overlay / Video Component"
+            >
+              <span className={`w-2 h-2 rounded-full ${videoMode === 'overlay' ? 'bg-green-500' : 'bg-[#9146FF]'}`} />
+              <span className="font-medium">
+                {videoMode === 'overlay' ? 'Overlay: video_overlay.html' : 'Component: video_component.html'}
+              </span>
+            </button>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#9146FF]" />
               <span>Panel 1 (Left)</span>
@@ -189,11 +207,13 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1st Iframe: Overlay.html (Top of page, responsive aspect ratio) */}
+        {/* 1st Iframe: video_overlay.html (Default) or video_component.html */}
         <OverlayFrame
           aspectRatio={aspectRatio}
           streamBg={streamBg}
           refreshKey={refreshKey}
+          videoMode={videoMode}
+          onVideoModeChange={setVideoMode}
         />
 
         {/* 2nd & 3rd Iframes: Panel.html (Left) and Panel2.html (Right) */}

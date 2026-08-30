@@ -15,7 +15,7 @@ This directory contains the standalone Node.js **Extension Backend Service (EBS)
   - `POST /api/ebs/action` - Interaction handler (Poll votes, bits cheers, broadcast triggers).
   - `POST /api/ebs/pubsub/broadcast` - Broadcast simulation to connected extension views.
   - `GET /api/ebs/stats` - Server metrics and event counters.
-- **Static Asset Serving**: Serves `overlay.html`, `panel.html`, `panel2.html`, `config.html`, and `twitch-ext.js`.
+- **Static Asset Serving**: Serves `video_overlay.html`, `video_component.html`, `panel.html`, `panel2.html`, `config.html`, and `twitch-ext.js`.
 
 ## Setup & Running Locally
 
@@ -37,7 +37,8 @@ This directory contains the standalone Node.js **Extension Backend Service (EBS)
 
 4. Open in browser:
    - HTTPS EBS & Views: `https://localhost:3000`
-   - Overlay view: `https://localhost:3000/overlay.html`
+   - Video Overlay view: `https://localhost:3000/video_overlay.html`
+   - Video Component view: `https://localhost:3000/video_component.html`
    - Panel 1 view: `https://localhost:3000/panel.html`
    - Panel 2 view: `https://localhost:3000/panel2.html`
    - Broadcaster Config: `https://localhost:3000/config.html`

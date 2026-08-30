@@ -187,10 +187,11 @@ fs.writeFileSync('Server/ssl/server.cert', forge.pki.certificateToPem(cert));`;
                     <span>2.</span> Twitch Developer Console URLs
                   </span>
                   <ul className="text-[11px] space-y-1 text-[#ADADB8] font-mono">
-                    <li>Overlay: <span className="text-[#EFEFF1]">https://localhost:3000/overlay.html</span></li>
-                    <li>Panel: <span className="text-[#EFEFF1]">https://localhost:3000/panel.html</span></li>
-                    <li>Component: <span className="text-[#EFEFF1]">https://localhost:3000/panel2.html</span></li>
-                    <li>Config: <span className="text-[#EFEFF1]">https://localhost:3000/config.html</span></li>
+                    <li>Video Overlay: <span className="text-[#EFEFF1]">https://localhost:3000/video_overlay.html</span></li>
+                    <li>Video Component: <span className="text-[#EFEFF1]">https://localhost:3000/video_component.html</span></li>
+                    <li>Panel 1: <span className="text-[#EFEFF1]">https://localhost:3000/panel.html</span></li>
+                    <li>Panel 2: <span className="text-[#EFEFF1]">https://localhost:3000/panel2.html</span></li>
+                    <li>Broadcaster Config: <span className="text-[#EFEFF1]">https://localhost:3000/config.html</span></li>
                   </ul>
                 </div>
               </div>

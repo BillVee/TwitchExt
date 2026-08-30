@@ -55,3 +55,6 @@ export interface RigContext {
 }
 
 export type AspectRatioPreset = '16:9 (1080p)' | '16:9 (720p)' | '4:3 (Classic)' | '21:9 (Ultrawide)' | 'Fluid';
+
+export type VideoViewMode = 'overlay' | 'component';
+export type ComponentDockPosition = 'right' | 'left' | 'floating';

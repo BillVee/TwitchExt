@@ -410,7 +410,7 @@ if (fs.existsSync(distDir)) {
 
 // Fallback route
 app.get('*', (req, res) => {
-  const overlayPath = path.join(publicDir, 'overlay.html');
+  const overlayPath = path.join(publicDir, 'video_overlay.html');
   if (fs.existsSync(overlayPath)) {
     res.sendFile(overlayPath);
   } else {
