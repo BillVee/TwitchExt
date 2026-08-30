@@ -5,9 +5,11 @@ import {
   Server, 
   ShieldCheck, 
   Layers, 
-  Radio
+  Radio,
+  AlertTriangle,
+  WifiOff
 } from 'lucide-react';
-import { AspectRatioPreset, RigAuth, RigContext } from '../types';
+import { AspectRatioPreset, RigAuth, RigContext, EbsNetworkError } from '../types';
 
 interface HeaderProps {
   auth: RigAuth;
@@ -20,6 +22,7 @@ interface HeaderProps {
   setStreamBg: (bg: boolean) => void;
   ebsOnline: boolean | null;
   ebsLatency: number | null;
+  ebsError: EbsNetworkError | null;
   onRefreshAll: () => void;
   onOpenServerModal: () => void;
 }
@@ -33,6 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   setStreamBg,
   ebsOnline,
   ebsLatency,
+  ebsError,
   onRefreshAll,
   onOpenServerModal,
 }) => {
@@ -64,19 +68,38 @@ export const Header: React.FC<HeaderProps> = ({
         <div 
           id="ebs-status-badge"
           onClick={onOpenServerModal}
-          className="cursor-pointer hidden sm:flex items-center gap-2 px-3 py-1 bg-[#1F1F23] rounded-full border border-[#2D2D30] hover:border-[#9146FF]/50 transition"
-          title="Click to view EBS Server & HTTPS node-forge setup"
+          className={`cursor-pointer hidden sm:flex items-center gap-2 px-3 py-1 rounded-full border transition ${
+            ebsOnline === null
+              ? 'bg-[#1F1F23] border-[#2D2D30]'
+              : ebsOnline
+                ? 'bg-emerald-950/40 border-emerald-500/40 hover:border-emerald-400'
+                : 'bg-rose-950/50 border-rose-500/60 hover:border-rose-400'
+          }`}
+          title={
+            ebsError
+              ? `${ebsError.title}: ${ebsError.message}\nClick for SSL & Server Guide`
+              : 'Click to view EBS Server & HTTPS node-forge setup'
+          }
         >
           <div className={`w-2 h-2 rounded-full ${
             ebsOnline === null 
               ? 'bg-amber-400 animate-pulse' 
               : ebsOnline 
-                ? 'bg-green-500 animate-pulse' 
-                : 'bg-rose-500'
+                ? 'bg-emerald-400 animate-pulse' 
+                : 'bg-rose-500 animate-ping'
           }`} />
-          <span className="text-xs font-mono text-[#ADADB8]">
-            EBS: {ebsOnline ? `https://localhost:3000 (${ebsLatency}ms)` : 'https://localhost:3000'}
+          <span className={`text-xs font-mono font-medium ${
+            ebsOnline ? 'text-emerald-300' : ebsOnline === false ? 'text-rose-300' : 'text-[#ADADB8]'
+          }`}>
+            {ebsOnline 
+              ? `EBS: Online (${ebsLatency}ms)` 
+              : ebsError 
+                ? `EBS: ${ebsError.category === 'cors' ? 'CORS Blocked' : 'Connection Refused'}`
+                : 'EBS: Offline'}
           </span>
+          {ebsError && (
+            <AlertTriangle className="w-3 h-3 text-rose-400" />
+          )}
         </div>
       </div>
 

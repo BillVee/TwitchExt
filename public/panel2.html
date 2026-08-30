@@ -38,6 +38,22 @@
       </div>
     </div>
 
+    <!-- Granular EBS Error & CORS / Connection Refused Diagnostic Alert -->
+    <div id="p2-ebs-error-box" class="hidden p-2.5 rounded-lg bg-rose-950/50 border border-rose-500/50 text-[11px] space-y-1.5 text-rose-200 shadow-inner">
+      <div class="flex items-center justify-between">
+        <span id="p2-ebs-error-tag" class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wide bg-rose-900 text-rose-100 border border-rose-500/40">
+          Connection Refused
+        </span>
+        <span id="p2-ebs-error-time" class="text-[9px] font-mono text-rose-300">--:--:--</span>
+      </div>
+      <div id="p2-ebs-error-text" class="text-[10px] text-rose-100 font-medium leading-tight break-all">
+        Failed to fetch from EBS endpoint.
+      </div>
+      <div id="p2-ebs-error-hint" class="text-[9px] text-[#D0D0D7] bg-[#18181B] p-1.5 rounded border border-[#2D2D30] font-mono leading-relaxed">
+        Hint: Check if server is running on port 3000 or CORS Access-Control-Allow-Origin header is missing.
+      </div>
+    </div>
+
     <!-- Twitch Bits Simulator Card (Demonstrates EBS transaction flow) -->
     <div class="bg-[#0E0E10] border border-[#2D2D30] rounded-lg p-2.5 space-y-2">
       <div class="flex items-center justify-between">
@@ -115,6 +131,11 @@
     const logBox = document.getElementById('p2-log-box');
     const ebsDot = document.getElementById('ebs-status-dot');
     const ebsStatusText = document.getElementById('ebs-status-text');
+    const p2EbsErrorBox = document.getElementById('p2-ebs-error-box');
+    const p2EbsErrorTag = document.getElementById('p2-ebs-error-tag');
+    const p2EbsErrorTime = document.getElementById('p2-ebs-error-time');
+    const p2EbsErrorText = document.getElementById('p2-ebs-error-text');
+    const p2EbsErrorHint = document.getElementById('p2-ebs-error-hint');
     const leaderboardList = document.getElementById('leaderboard-list');
 
     function log(msg, type = 'info') {
@@ -225,20 +246,53 @@
         const res = await ebs.ping();
         ebsDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
         ebsStatusText.textContent = `${res.latencyMs}ms`;
+        if (p2EbsErrorBox) p2EbsErrorBox.classList.add('hidden');
         log(`✓ EBS Ping OK (${res.latencyMs}ms) | URL: ${targetObj.href} | Port: ${port}`, 'success');
       } catch (err) {
-        ebsDot.className = 'w-2 h-2 rounded-full bg-rose-500';
+        ebsDot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-ping';
         ebsStatusText.textContent = 'Offline';
 
-        const errMsg = err.name === 'AbortError' ? 'Request timed out after 6s' : err.message;
-        log(`❌ EBS Error: ${err.name} - ${errMsg}`, 'error');
-        log(`   Target URL: ${targetObj.href}`, 'error');
-        log(`   Target Host: ${targetObj.hostname} | Target Port: ${port} | Protocol: ${targetObj.protocol}`, 'error');
-        log(`   Page Origin: ${window.location.origin} | Page Path: ${window.location.pathname}`, 'error');
+        const errMsg = err.name === 'AbortError' ? 'Request timed out after 6s' : (err.message || String(err));
+        
+        let errorType = 'Connection Refused';
+        let badgeStyle = 'bg-rose-900 text-rose-100 border-rose-500/40';
+        let hintText = `Check if Node.js EBS server is running on port ${port} ("node ./Server/server.js").`;
 
         if (err.name === 'TypeError' || errMsg.toLowerCase().includes('failed to fetch') || errMsg.toLowerCase().includes('networkerror')) {
-          log(`💡 Diagnostic Tip: If EBS is on https://${targetObj.hostname}:${port} with self-signed SSL, open "${targetObj.href}" in a new browser tab to accept the certificate, or start server with USE_SSL=false.`, 'event');
+          if (window.location.protocol === 'https:' && targetObj.protocol === 'http:') {
+            errorType = 'Mixed Content (CORS Blocked)';
+            badgeStyle = 'bg-amber-900 text-amber-100 border-amber-500/40';
+            hintText = 'Insecure HTTP request blocked from HTTPS origin. Use HTTPS endpoint or relative proxy /api/ebs.';
+          } else {
+            errorType = 'CORS / Connection Refused';
+            badgeStyle = 'bg-rose-900 text-rose-100 border-rose-500/40';
+            hintText = `ERR_CONNECTION_REFUSED or missing CORS header. Ensure Express returns "Access-Control-Allow-Origin: *" and port ${port} is reachable. If testing self-signed SSL on https://${targetObj.hostname}:${port}, open endpoint in browser tab to accept certificate.`;
+          }
+        } else if (err.name === 'AbortError') {
+          errorType = 'Timeout (6s)';
+          badgeStyle = 'bg-amber-900 text-amber-100 border-amber-500/40';
+          hintText = 'EBS backend took longer than 6 seconds to respond. Check for server hanging or process locks.';
+        } else if (errMsg.startsWith('HTTP ')) {
+          const is403 = errMsg.includes('403') || errMsg.includes('401');
+          errorType = is403 ? 'CORS / Access Forbidden' : 'HTTP Error Response';
+          badgeStyle = 'bg-amber-900 text-amber-100 border-amber-500/40';
+          hintText = `Server responded with ${errMsg}. Check EBS route handlers, CORS configuration, and JWT authorization headers.`;
         }
+
+        if (p2EbsErrorBox) {
+          p2EbsErrorBox.classList.remove('hidden');
+          if (p2EbsErrorTag) {
+            p2EbsErrorTag.textContent = errorType;
+            p2EbsErrorTag.className = `px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wide border ${badgeStyle}`;
+          }
+          if (p2EbsErrorTime) p2EbsErrorTime.textContent = new Date().toLocaleTimeString();
+          if (p2EbsErrorText) p2EbsErrorText.textContent = `❌ ${errMsg} (URL: ${targetObj.href})`;
+          if (p2EbsErrorHint) p2EbsErrorHint.textContent = `💡 ${hintText}`;
+        }
+
+        log(`❌ EBS Error: [${errorType}] ${errMsg}`, 'error');
+        log(`   Target URL: ${targetObj.href} | Port: ${port}`, 'error');
+        log(`   Diagnostic: ${hintText}`, 'error');
       }
     }
 

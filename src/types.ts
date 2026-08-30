@@ -58,3 +58,24 @@ export type AspectRatioPreset = '16:9 (1080p)' | '16:9 (720p)' | '4:3 (Classic)'
 
 export type VideoViewMode = 'overlay' | 'component';
 export type ComponentDockPosition = 'right' | 'left' | 'floating';
+
+export type EbsErrorCategory = 
+  | 'cors' 
+  | 'connection_refused' 
+  | 'ssl_untrusted' 
+  | 'timeout' 
+  | 'http_error' 
+  | 'mixed_content'
+  | 'unknown_network';
+
+export interface EbsNetworkError {
+  category: EbsErrorCategory;
+  title: string;
+  message: string;
+  details?: string;
+  targetUrl: string;
+  timestamp: string;
+  statusText?: string;
+  statusCode?: number;
+  suggestion: string;
+}

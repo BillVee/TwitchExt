@@ -14,7 +14,8 @@ import { OverlayFrame } from './components/OverlayFrame';
 import { PanelFrames } from './components/PanelFrames';
 import { ConfigFrame } from './components/ConfigFrame';
 import { ServerGuideModal } from './components/ServerGuideModal';
-import { AspectRatioPreset, RigAuth, RigContext, VideoViewMode } from './types';
+import { EbsErrorBanner } from './components/EbsErrorBanner';
+import { AspectRatioPreset, RigAuth, RigContext, VideoViewMode, EbsNetworkError } from './types';
 import { Radio, Activity, CheckCircle2, Shield, Sparkles, LayoutTemplate, Monitor } from 'lucide-react';
 
 export default function App() {
@@ -35,9 +36,10 @@ export default function App() {
     return 'overlay';
   });
 
-  // EBS Server Communication Status
+  // EBS Server Communication Status & Network Error Tracking
   const [ebsOnline, setEbsOnline] = useState<boolean | null>(null);
   const [ebsLatency, setEbsLatency] = useState<number | null>(null);
+  const [ebsError, setEbsError] = useState<EbsNetworkError | null>(null);
 
   // Twitch Mock Context & Auth State
   const [auth, setAuth] = useState<RigAuth>({
@@ -61,20 +63,102 @@ export default function App() {
     hlsLatencyBroadcaster: 1.8,
   });
 
-  // Check EBS server connectivity
+  // Check EBS server connectivity and capture granular network error diagnostics
   const checkEbsHealth = useCallback(async () => {
+    const targetEndpoint = '/api/ebs/ping';
+    const targetUrl = typeof window !== 'undefined' 
+      ? new URL(targetEndpoint, window.location.href).href 
+      : targetEndpoint;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     try {
       const start = performance.now();
-      const res = await fetch('/api/ebs/ping');
+      const res = await fetch(targetEndpoint, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' },
+      });
+      clearTimeout(timeoutId);
       const latency = Math.round(performance.now() - start);
+
       if (res.ok) {
         setEbsOnline(true);
         setEbsLatency(latency);
+        setEbsError(null);
       } else {
         setEbsOnline(false);
+        setEbsLatency(null);
+
+        const isCors = res.status === 403 || res.status === 401;
+        setEbsError({
+          category: isCors ? 'cors' : 'http_error',
+          title: isCors ? 'CORS / Access Forbidden' : `HTTP Error ${res.status}`,
+          message: `EBS endpoint returned status ${res.status} (${res.statusText || 'Error Response'}).`,
+          statusCode: res.status,
+          statusText: res.statusText,
+          targetUrl,
+          timestamp: new Date().toLocaleTimeString(),
+          suggestion: isCors
+            ? 'The EBS server rejected the request. Ensure CORS headers (Access-Control-Allow-Origin: *) and valid JWT authorization headers are configured in ./Server/server.js.'
+            : `The server responded with an error status code (${res.status}). Verify your EBS route handlers.`,
+        });
       }
-    } catch {
+    } catch (err: any) {
+      clearTimeout(timeoutId);
       setEbsOnline(false);
+      setEbsLatency(null);
+
+      const isAbort = err.name === 'AbortError';
+      const rawMsg = err?.message || String(err);
+      const isTypeError = err.name === 'TypeError' || rawMsg.toLowerCase().includes('failed to fetch') || rawMsg.toLowerCase().includes('networkerror');
+
+      if (isAbort) {
+        setEbsError({
+          category: 'timeout',
+          title: 'EBS Ping Timed Out',
+          message: 'The EBS health check request exceeded the 5-second timeout limit without receiving a response.',
+          targetUrl,
+          timestamp: new Date().toLocaleTimeString(),
+          suggestion: 'Check if the backend process is hanging or if a firewall is silently dropping packets.',
+        });
+      } else if (isTypeError) {
+        // Distinguish CORS vs Connection Refused vs Mixed Content
+        const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+        const isTargetHttp = targetUrl.startsWith('http://');
+
+        if (isHttps && isTargetHttp) {
+          setEbsError({
+            category: 'mixed_content',
+            title: 'Mixed Content / Insecure HTTP Blocked',
+            message: `Browser blocked fetching insecure HTTP endpoint (${targetUrl}) from secure HTTPS origin (${window.location.origin}).`,
+            targetUrl,
+            timestamp: new Date().toLocaleTimeString(),
+            suggestion: 'Use relative proxy path /api/ebs or configure SSL certificate using node-forge in ./Server/server.js.',
+          });
+        } else {
+          // Standard browser network error (connection refused, server down, or missing CORS headers)
+          setEbsError({
+            category: 'connection_refused',
+            title: 'Connection Refused / EBS Offline',
+            message: `Failed to connect to EBS at ${targetUrl}. The server may not be running, or CORS headers blocked the response (TypeError: ${rawMsg}).`,
+            details: `Underlying browser exception: ${err.name} - ${rawMsg}`,
+            targetUrl,
+            timestamp: new Date().toLocaleTimeString(),
+            suggestion: '1) Verify the EBS backend is running: run "node ./Server/server.js" in your terminal. 2) Ensure Express has "Access-Control-Allow-Origin: *" enabled. 3) If testing local self-signed HTTPS (https://localhost:3000), open the URL in a browser tab to accept the certificate.',
+          });
+        }
+      } else {
+        setEbsError({
+          category: 'unknown_network',
+          title: 'Network Communication Error',
+          message: `Could not ping EBS: ${rawMsg}`,
+          details: String(err),
+          targetUrl,
+          timestamp: new Date().toLocaleTimeString(),
+          suggestion: 'Check browser console and server terminal logs for additional diagnostic details.',
+        });
+      }
     }
   }, []);
 
@@ -165,6 +249,7 @@ export default function App() {
         setStreamBg={setStreamBg}
         ebsOnline={ebsOnline}
         ebsLatency={ebsLatency}
+        ebsError={ebsError}
         onRefreshAll={handleRefreshAll}
         onOpenServerModal={() => setIsServerModalOpen(true)}
       />
@@ -172,6 +257,15 @@ export default function App() {
       {/* Main Responsive Workspace */}
       <main id="rig-main-workspace" className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 space-y-4">
         
+        {/* EBS Connectivity Failure & CORS / Connection-Refused Diagnostic Banner */}
+        {ebsError && (
+          <EbsErrorBanner
+            error={ebsError}
+            onRetry={checkEbsHealth}
+            onOpenServerModal={() => setIsServerModalOpen(true)}
+          />
+        )}
+
         {/* Quick Info & Rig Status Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-[#18181B] border border-[#2D2D30] rounded-lg px-4 py-2.5 text-xs">
           <div className="flex items-center gap-2 text-[#ADADB8]">
@@ -219,6 +313,8 @@ export default function App() {
         {/* 2nd & 3rd Iframes: Panel.html (Left) and Panel2.html (Right) */}
         <PanelFrames
           refreshKey={refreshKey}
+          ebsOnline={ebsOnline}
+          ebsError={ebsError}
         />
 
         {/* 4th Iframe: Config.html (Bottom of other 3, Full Width) */}

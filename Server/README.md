@@ -44,3 +44,7 @@ This directory contains the standalone Node.js **Extension Backend Service (EBS)
    - Broadcaster Config: `https://localhost:3000/config.html`
 
 *Note on Self-Signed Certificates:* Because `node-forge` creates a self-signed developer certificate, your browser will show a standard certificate warning on the first visit. Click **"Advanced" -> "Proceed to localhost (unsafe)"** to accept the local dev cert.
+
+## Full Setup & Extension Guide
+
+For a complete guide covering all Twitch extension slots (Panel, Video Overlay, Video Component, Mobile) and EBS architectural setup, consult [TwitchSetup.md](../TwitchSetup.md).

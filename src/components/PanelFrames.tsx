@@ -1,8 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ExternalLink, RefreshCw, Smartphone, LayoutGrid, Sliders } from 'lucide-react';
+import { ExternalLink, RefreshCw, Smartphone, LayoutGrid, Sliders, AlertTriangle } from 'lucide-react';
+import { EbsNetworkError } from '../types';
 
 interface PanelFramesProps {
   refreshKey: number;
+  ebsOnline?: boolean | null;
+  ebsError?: EbsNetworkError | null;
 }
 
 function parseInitialHeight(val: any, fallback = 460): number {
@@ -12,7 +15,7 @@ function parseInitialHeight(val: any, fallback = 460): number {
   return Math.max(100, Math.min(500, num));
 }
 
-export const PanelFrames: React.FC<PanelFramesProps> = ({ refreshKey }) => {
+export const PanelFrames: React.FC<PanelFramesProps> = ({ refreshKey, ebsOnline, ebsError }) => {
   const panel1Ref = useRef<HTMLIFrameElement>(null);
   const panel2Ref = useRef<HTMLIFrameElement>(null);
 
@@ -91,6 +94,12 @@ export const PanelFrames: React.FC<PanelFramesProps> = ({ refreshKey }) => {
             <span className="px-2 py-0.5 bg-black/60 rounded text-[10px] uppercase font-bold tracking-widest text-[#ADADB8] border border-white/10">
               panel.html
             </span>
+            {ebsError && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wide bg-rose-950/80 text-rose-300 border border-rose-500/50 flex items-center gap-1">
+                <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+                {ebsError.category === 'cors' ? 'CORS Err' : 'EBS Offline'}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -193,6 +202,12 @@ export const PanelFrames: React.FC<PanelFramesProps> = ({ refreshKey }) => {
             <span className="px-2 py-0.5 bg-black/60 rounded text-[10px] uppercase font-bold tracking-widest text-[#ADADB8] border border-white/10">
               panel2.html
             </span>
+            {ebsError && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wide bg-rose-950/80 text-rose-300 border border-rose-500/50 flex items-center gap-1">
+                <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+                {ebsError.category === 'cors' ? 'CORS Err' : 'EBS Offline'}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5">
