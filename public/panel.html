@@ -423,7 +423,10 @@
     loadEbsState();
 
     if (window.Twitch && window.Twitch.ext) {
-      window.Twitch.ext.onAuthorized(() => {
+      window.Twitch.ext.onAuthorized((auth) => {
+        if (auth) {
+          log(`Auth updated: Role=${auth.role || 'viewer'} Channel=${auth.channelId || '--'} User=${auth.userId || '--'}`, 'info');
+        }
         checkEbs();
         loadEbsState();
       });

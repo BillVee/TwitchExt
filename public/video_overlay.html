@@ -336,7 +336,7 @@
     // Initialize Twitch Extension bindings
     if (window.Twitch && window.Twitch.ext) {
       window.Twitch.ext.onAuthorized((auth) => {
-        log(`Twitch Auth received for Channel: ${auth.channelId}`, 'info');
+        log(`Twitch Auth: Role=${auth.role || 'viewer'} Channel=${auth.channelId || '--'} User=${auth.userId || '--'}`, 'info');
         testEbsPing();
         fetchEbsState();
       });

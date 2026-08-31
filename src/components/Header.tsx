@@ -10,6 +10,8 @@ import {
   WifiOff
 } from 'lucide-react';
 import { AspectRatioPreset, RigAuth, RigContext, EbsNetworkError } from '../types';
+import { JwtPayloadInspector } from './JwtPayloadInspector';
+import { generateTwitchJwt } from '../utils/jwt';
 
 interface HeaderProps {
   auth: RigAuth;
@@ -40,6 +42,18 @@ export const Header: React.FC<HeaderProps> = ({
   onRefreshAll,
   onOpenServerModal,
 }) => {
+  const handleRoleChange = (newRole: 'broadcaster' | 'moderator' | 'viewer' | 'external') => {
+    const updatedToken = generateTwitchJwt({
+      channelId: auth.channelId || '12345678',
+      userId: auth.userId || '98765432',
+      role: newRole,
+    });
+    setAuth(prev => ({
+      ...prev,
+      role: newRole,
+      token: updatedToken,
+    }));
+  };
   return (
     <header id="rig-header" className="flex items-center justify-between px-4 sm:px-6 h-14 bg-[#18181B] border-b border-[#2D2D30] shrink-0 sticky top-0 z-50">
       
@@ -125,6 +139,9 @@ export const Header: React.FC<HeaderProps> = ({
           </select>
         </div>
 
+        {/* JWT Payload Inspector & Token Verification Component */}
+        <JwtPayloadInspector auth={auth} setAuth={setAuth} />
+
         {/* Viewer Role Simulator */}
         <div className="flex items-center gap-1.5 bg-[#1F1F23] px-2.5 py-1 rounded border border-[#2D2D30] text-xs">
           <ShieldCheck className="w-3.5 h-3.5 text-[#9146FF]" />
@@ -132,7 +149,7 @@ export const Header: React.FC<HeaderProps> = ({
           <select
             id="select-mock-role"
             value={auth.role}
-            onChange={(e) => setAuth(prev => ({ ...prev, role: e.target.value as any }))}
+            onChange={(e) => handleRoleChange(e.target.value as any)}
             aria-label="Select Mock Viewer Role"
             className="bg-transparent text-[#EFEFF1] text-xs focus:outline-none cursor-pointer"
           >

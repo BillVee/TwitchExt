@@ -17,10 +17,31 @@
     pubsub: new Map(),
   };
 
+  function createDefaultMockJwt(channelId, userId, role) {
+    try {
+      const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const now = Math.floor(Date.now() / 1000);
+      const payload = btoa(JSON.stringify({
+        exp: now + 86400,
+        iat: now,
+        opaque_user_id: 'U' + userId,
+        user_id: userId,
+        channel_id: channelId,
+        role: role,
+        is_unlinked: false,
+        pubsub_perms: { listen: ['broadcast', 'global'], send: role === 'broadcaster' ? ['broadcast'] : [] }
+      })).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const sig = btoa('mock_sig_' + channelId + '_' + userId).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      return header + '.' + payload + '.' + sig;
+    } catch(e) {
+      return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE5OTk5OTk5OTksInVzZXJfaWQiOiI5ODc2NTQzMiIsImNoYW5uZWxfaWQiOiIxMjM0NTY3OCIsInJvbGUiOiJicm9hZGNhc3RlciJ9.mock_signature';
+    }
+  }
+
   let currentAuth = {
     channelId: '12345678',
     clientId: 'mock-twitch-client-id-xyz',
-    token: 'mock.jwt.token.twitch_extension_payload',
+    token: createDefaultMockJwt('12345678', '98765432', 'broadcaster'),
     userId: '98765432',
     role: 'broadcaster',
     helixToken: 'mock_helix_token',

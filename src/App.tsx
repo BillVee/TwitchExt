@@ -17,6 +17,7 @@ import { ServerGuideModal } from './components/ServerGuideModal';
 import { EbsErrorBanner } from './components/EbsErrorBanner';
 import { AspectRatioPreset, RigAuth, RigContext, VideoViewMode, EbsNetworkError } from './types';
 import { Radio, Activity, CheckCircle2, Shield, Sparkles, LayoutTemplate, Monitor } from 'lucide-react';
+import { generateTwitchJwt } from './utils/jwt';
 
 export default function App() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatioPreset>('16:9 (1080p)');
@@ -42,13 +43,20 @@ export default function App() {
   const [ebsError, setEbsError] = useState<EbsNetworkError | null>(null);
 
   // Twitch Mock Context & Auth State
-  const [auth, setAuth] = useState<RigAuth>({
-    channelId: '12345678',
-    clientId: 'mock-twitch-client-id-xyz',
-    token: 'mock.jwt.token.twitch_extension_payload',
-    userId: '98765432',
-    role: 'broadcaster',
-    helixToken: 'mock_helix_token',
+  const [auth, setAuth] = useState<RigAuth>(() => {
+    const channelId = '12345678';
+    const userId = '98765432';
+    const role = 'broadcaster';
+    const token = generateTwitchJwt({ channelId, userId, role });
+
+    return {
+      channelId,
+      clientId: 'mock-twitch-client-id-xyz',
+      token,
+      userId,
+      role,
+      helixToken: 'mock_helix_token',
+    };
   });
 
   const [context, setContext] = useState<RigContext>({
